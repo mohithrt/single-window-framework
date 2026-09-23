@@ -1,0 +1,75 @@
+{
+  "version": "1.0.0",
+  "departments": [
+    {
+      "code": "MPCB",
+      "name": "MPCB",
+      "estimated_duration_days": 14,
+      "default_required": false,
+      "required_when_any": [
+        { "field": "industry_type", "op": "in", "value": ["Manufacturing", "Food Processing", "Textile", "Chemical", "Pharmaceutical", "Automobile", "Electronics"] },
+        { "field": "pollution_category", "op": "in", "value": ["Green", "Orange", "Red", "Not sure"] },
+        { "field": "hazardous_materials", "op": "equals", "value": true }
+      ],
+      "depends_on": []
+    },
+    {
+      "code": "MIDC",
+      "name": "MIDC",
+      "estimated_duration_days": 18,
+      "default_required": false,
+      "required_when_any": [{ "field": "midc_area", "op": "equals", "value": true }],
+      "depends_on": ["MPCB"]
+    },
+    {
+      "code": "DISH",
+      "name": "DISH",
+      "estimated_duration_days": 12,
+      "default_required": false,
+      "required_when_any": [
+        { "field": "industry_type", "op": "in", "value": ["Manufacturing", "Food Processing", "Textile", "Chemical", "Pharmaceutical", "Automobile", "Electronics"] },
+        { "field": "built_up_area", "op": "gte", "value": 5000 },
+        { "field": "number_of_employees", "op": "gte", "value": 20 },
+        { "field": "hazardous_materials", "op": "equals", "value": true }
+      ],
+      "depends_on": []
+    },
+    {
+      "code": "FIRE_SERVICES",
+      "name": "Fire Services",
+      "estimated_duration_days": 12,
+      "default_required": false,
+      "required_when_any": [
+        { "field": "industry_type", "op": "in", "value": ["Manufacturing", "Food Processing", "Textile", "Chemical", "Pharmaceutical", "Automobile"] },
+        { "field": "hazardous_materials", "op": "equals", "value": true },
+        { "field": "built_up_area", "op": "gte", "value": 25000 },
+        { "field": "risk_tier", "op": "equals", "value": "HIGH" }
+      ],
+      "depends_on": ["MPCB"]
+    },
+    {
+      "code": "GSTN",
+      "name": "GSTN",
+      "estimated_duration_days": 5,
+      "default_required": false,
+      "required_when_any": [{ "field": "gstin", "op": "present" }],
+      "depends_on": []
+    },
+    {
+      "code": "MCA21",
+      "name": "MCA21",
+      "estimated_duration_days": 5,
+      "default_required": true,
+      "required_when_any": [{ "field": "cin", "op": "present" }],
+      "depends_on": []
+    },
+    {
+      "code": "UDYAM",
+      "name": "Udyam",
+      "estimated_duration_days": 4,
+      "default_required": false,
+      "required_when_any": [{ "field": "udyam_number", "op": "present" }],
+      "depends_on": []
+    }
+  ]
+}

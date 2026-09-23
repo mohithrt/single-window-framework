@@ -49,6 +49,17 @@ class ApplicationStatus(StrEnum):
     REJECTED = "REJECTED"
 
 
+class ApprovalStatus(StrEnum):
+    NOT_STARTED = "NOT_STARTED"
+    PENDING = "PENDING"
+    IN_REVIEW = "IN_REVIEW"
+    DOCUMENT_CORRECTION = "DOCUMENT_CORRECTION"
+    INSPECTION_REQUIRED = "INSPECTION_REQUIRED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    ESCALATED = "ESCALATED"
+
+
 class PollutionCategory(StrEnum):
     WHITE = "White"
     GREEN = "Green"
@@ -213,6 +224,12 @@ class Application(Base):
     risk_assessments: Mapped[list["RiskAssessment"]] = relationship(
         back_populates="application", cascade="all, delete-orphan", passive_deletes=True
     )
+    approvals: Mapped[list["ApplicationApproval"]] = relationship(
+        back_populates="application", cascade="all, delete-orphan", passive_deletes=True
+    )
+    workflow_events: Mapped[list["WorkflowAuditEvent"]] = relationship(
+        back_populates="application", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class ApplicationDocument(Base):
@@ -282,3 +299,84 @@ class RiskAssessment(Base):
 
     application: Mapped[Application] = relationship(back_populates="risk_assessments")
     assessed_by: Mapped[User] = relationship()
+
+
+class ApplicationApproval(Base):
+    __tablename__ = "application_approvals"
+    __table_args__ = (
+        UniqueConstraint("application_id", "department_code", name="uq_application_approval_department"),
+        CheckConstraint(
+            "status IN ('NOT_STARTED', 'PENDING', 'IN_REVIEW', 'DOCUMENT_CORRECTION', 'INSPECTION_REQUIRED', 'APPROVED', 'REJECTED', 'ESCALATED')",
+            name="ck_application_approvals_status",
+        ),
+        Index("ix_application_approvals_application_status", "application_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    department_code: Mapped[str] = mapped_column(String(24), nullable=False)
+    department_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default=ApprovalStatus.NOT_STARTED.value)
+    depends_on: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    decision_message: Mapped[str | None] = mapped_column(Text)
+    assigned_reviewer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    application: Mapped[Application] = relationship(back_populates="approvals")
+    assigned_reviewer: Mapped[User | None] = relationship()
+    audit_events: Mapped[list["WorkflowAuditEvent"]] = relationship(back_populates="approval")
+    inspections: Mapped[list["Inspection"]] = relationship(
+        back_populates="approval", cascade="all, delete-orphan", passive_deletes=True
+    )
+
+
+class Inspection(Base):
+    __tablename__ = "inspections"
+    __table_args__ = (
+        CheckConstraint("inspection_type IN ('SINGLE', 'JOINT')", name="ck_inspections_type"),
+        CheckConstraint("status IN ('SCHEDULED', 'COMPLETED', 'CANCELLED')", name="ck_inspections_status"),
+        Index("ix_inspections_scheduled_type", "scheduled_at", "inspection_type"),
+        Index("ix_inspections_application_status", "application_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    approval_id: Mapped[int] = mapped_column(ForeignKey("application_approvals.id", ondelete="CASCADE"), nullable=False)
+    inspection_type: Mapped[str] = mapped_column(String(12), nullable=False, default="SINGLE")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="SCHEDULED", server_default="SCHEDULED")
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    location: Mapped[str] = mapped_column(String(500), nullable=False)
+    instructions: Mapped[str | None] = mapped_column(Text)
+    scheduled_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    application: Mapped[Application] = relationship()
+    approval: Mapped[ApplicationApproval] = relationship(back_populates="inspections")
+    scheduled_by: Mapped[User] = relationship()
+
+
+class WorkflowAuditEvent(Base):
+    __tablename__ = "workflow_audit_events"
+    __table_args__ = (
+        Index("ix_workflow_events_application_created", "application_id", "created_at"),
+        Index("ix_workflow_events_approval", "approval_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    approval_id: Mapped[int | None] = mapped_column(ForeignKey("application_approvals.id", ondelete="SET NULL"))
+    actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    action: Mapped[str] = mapped_column(String(48), nullable=False)
+    from_status: Mapped[str | None] = mapped_column(String(32))
+    to_status: Mapped[str | None] = mapped_column(String(32))
+    message: Mapped[str | None] = mapped_column(Text)
+    details: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    application: Mapped[Application] = relationship(back_populates="workflow_events")
+    approval: Mapped[ApplicationApproval | None] = relationship(back_populates="audit_events")
+    actor: Mapped[User] = relationship()

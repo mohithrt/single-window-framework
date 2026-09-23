@@ -110,7 +110,7 @@ export default function ApplicantDashboard() {
                         <td><div className="progress-cell"><div className="progress-track"><i style={{ width: `${application.progress_percent}%` }} /></div><span>{application.progress_percent}%</span></div></td>
                         <td>{application.current_department_name || (isDraft ? 'Not assigned' : 'Awaiting assignment')}</td>
                         <td>{formatDate(application.expected_completion_at)}</td>
-                        <td><a className="table-action" href={href}>{isDraft ? 'Edit draft' : 'View'} <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/risk`}>Risk assessment <span>→</span></a></td>
+                        <td><a className="table-action" href={href}>{isDraft ? 'Edit draft' : 'View'} <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/risk`}>Risk assessment <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/approvals`}>Approvals <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/critical-path`}>Critical path <span>→</span></a></td>
                       </tr>
                     })}</tbody>
                   </table>

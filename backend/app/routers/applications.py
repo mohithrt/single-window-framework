@@ -28,6 +28,7 @@ from app.models import IndustryType, PollutionCategory
 from app.document_processor import DocumentProcessor, get_document_processor
 from app.prevalidation import DOCUMENT_LABELS, prevalidation_payload, run_prevalidation
 from app.models import ApplicationValidationIssue
+from app.workflow_service import WorkflowService
 
 router = APIRouter(
     prefix="/applications",
@@ -451,6 +452,7 @@ def submit_application(
     application.status = ApplicationStatus.SUBMITTED.value
     application.submitted_at = datetime.now(UTC)
     application.progress_percent = 100
+    WorkflowService().initialize(db, application, user.id)
     db.commit()
     db.refresh(application)
     return to_read(load_owned_application(db, application.id, user.id))

@@ -4,6 +4,9 @@ import ApplicantDashboard from './ApplicantDashboard'
 import ApplicationWizard, { StartApplication } from './ApplicationWizard'
 import PrevalidationPage from './PrevalidationPage'
 import RiskAssessmentPage from './RiskAssessmentPage'
+import ApprovalStatusPage from './ApprovalStatusPage'
+import CriticalPathPage from './CriticalPathPage'
+import OfficerPortal from './OfficerPortal'
 
 type Role = 'APPLICANT' | 'OFFICER' | 'ADMIN'
 type User = { id: number; email: string; full_name: string; role: Role }
@@ -221,9 +224,20 @@ export default function App() {
   if (prevalidationRoute) return <PrevalidationPage applicationId={Number(prevalidationRoute[1])} />
   const riskRoute = path.match(/^\/applicant\/applications\/(\d+)\/risk$/)
   if (riskRoute) return <RiskAssessmentPage applicationId={Number(riskRoute[1])} />
+  const approvalsRoute = path.match(/^\/applicant\/applications\/(\d+)\/approvals$/)
+  if (approvalsRoute) return <ApprovalStatusPage applicationId={Number(approvalsRoute[1])} />
+  const criticalPathRoute = path.match(/^\/applicant\/applications\/(\d+)\/critical-path$/)
+  if (criticalPathRoute) return <CriticalPathPage applicationId={Number(criticalPathRoute[1])} />
   const applicationRoute = path.match(/^\/applicant\/applications\/(\d+)\/(edit|view)$/)
   if (applicationRoute) return <ApplicationWizard applicationId={Number(applicationRoute[1])} readOnly={applicationRoute[2] === 'view'} />
-  if (path === '/officer') return <DashboardPage expectedRole="OFFICER" />
+  const officerReviewRoute = path.match(/^\/officer\/approvals\/(\d+)$/)
+  if (officerReviewRoute) return <OfficerPortal view="review" approvalId={Number(officerReviewRoute[1])} />
+  const officerRoutes: Record<string, 'dashboard' | 'queue' | 'inspections' | 'joint-inspections' | 'documents' | 'escalations' | 'reports' | 'profile'> = {
+    '/officer': 'dashboard', '/officer/queue': 'queue', '/officer/inspections': 'inspections',
+    '/officer/joint-inspections': 'joint-inspections', '/officer/documents': 'documents',
+    '/officer/escalations': 'escalations', '/officer/reports': 'reports', '/officer/profile': 'profile',
+  }
+  if (officerRoutes[path]) return <OfficerPortal view={officerRoutes[path]} />
   if (path === '/admin') return <DashboardPage expectedRole="ADMIN" />
   return <LoginPage />
 }
