@@ -1,0 +1,31 @@
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+frontend/dist/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+/backend/uploads/
+/backend/.test-uploads/
+*.sqlite3
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local data and logs
+*.log
+postgres-data/
+redis-data/

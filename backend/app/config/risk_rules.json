@@ -1,0 +1,128 @@
+{
+  "version": "1.0.0",
+  "description": "Transparent additive industrial project risk points. Positive adds risk; negative reduces risk.",
+  "tier_thresholds": {
+    "LOW": { "max_score": 9 },
+    "MEDIUM": { "max_score": 54 },
+    "HIGH": { "max_score": 100 }
+  },
+  "factors": {
+    "industry": {
+      "label": "Industry",
+      "scores": {
+        "IT / Software": -6,
+        "Manufacturing": 15,
+        "Food Processing": 14,
+        "Textile": 16,
+        "Chemical": 25,
+        "Pharmaceutical": 20,
+        "Automobile": 19,
+        "Electronics": 14,
+        "Logistics": 12,
+        "Other": 12
+      },
+      "missing_score": 8
+    },
+    "pollution_category": {
+      "label": "Pollution category",
+      "scores": { "White": -2, "Green": 2, "Orange": 10, "Red": 18, "Not sure": 7 },
+      "missing_score": 5
+    },
+    "hazardous_materials": {
+      "label": "Hazardous materials",
+      "yes_score": 12,
+      "no_score": -2,
+      "unknown_score": 4
+    },
+    "investment_amount": {
+      "label": "Investment amount",
+      "unit": "INR",
+      "ranges": [
+        { "max": 10000000, "score": -1 },
+        { "max": 100000000, "score": 3 },
+        { "max": 500000000, "score": 6 },
+        { "score": 8 }
+      ],
+      "missing_score": 4
+    },
+    "built_up_area": {
+      "label": "Factory size (built-up area)",
+      "unit": "sq. ft.",
+      "ranges": [
+        { "max": 10000, "score": -1 },
+        { "max": 50000, "score": 3 },
+        { "max": 200000, "score": 6 },
+        { "score": 9 }
+      ],
+      "missing_score": 4
+    },
+    "number_of_employees": {
+      "label": "Employee count",
+      "unit": "people",
+      "ranges": [
+        { "max": 50, "score": -1 },
+        { "max": 250, "score": 3 },
+        { "max": 1000, "score": 5 },
+        { "score": 7 }
+      ],
+      "missing_score": 3
+    },
+    "power_requirement": {
+      "label": "Power requirement",
+      "unit": "kW",
+      "ranges": [
+        { "max": 100, "score": -1 },
+        { "max": 500, "score": 3 },
+        { "max": 2000, "score": 6 },
+        { "score": 8 }
+      ],
+      "missing_score": 4
+    },
+    "environmental_impact": {
+      "label": "Environmental impact",
+      "missing_environmental_document_score": 3,
+      "present_environmental_document_score": -2,
+      "risk_signals": [
+        { "terms": ["effluent", "wastewater", "discharge"], "points": 3, "reason": "Effluent or wastewater impact described" },
+        { "terms": ["emission", "smoke", "stack", "dust"], "points": 2, "reason": "Air emissions or dust described" },
+        { "terms": ["solvent", "chemical", "toxic"], "points": 3, "reason": "Chemical or toxic materials described" },
+        { "terms": ["hazardous waste", "industrial waste", "sludge"], "points": 2, "reason": "Hazardous or industrial waste described" }
+      ],
+      "mitigation_signals": [
+        { "terms": ["closed loop", "zero discharge"], "points": -2, "reason": "Closed-loop or zero-discharge control described" },
+        { "terms": ["recycling", "reuse", "recovery"], "points": -1, "reason": "Reuse or recycling control described" }
+      ],
+      "minimum_score": -4,
+      "maximum_score": 10,
+      "no_signal_score": 0
+    },
+    "fire_risk": {
+      "label": "Fire risk",
+      "missing_safety_information_score": 4,
+      "hazardous_materials_score": 3,
+      "risk_signals": [
+        { "terms": ["flammable", "inflammable"], "points": 3, "reason": "Flammable materials mentioned" },
+        { "terms": ["explosive", "combustible"], "points": 3, "reason": "Explosive or combustible materials mentioned" },
+        { "terms": ["boiler", "furnace", "fuel", "solvent", "gas cylinder"], "points": 2, "reason": "Heat source, fuel, or solvent mentioned" }
+      ],
+      "mitigation_signals": [
+        { "terms": ["sprinkler", "fire alarm", "hydrant", "fire extinguisher"], "points": -2, "reason": "Fire detection or suppression control described" },
+        { "terms": ["emergency exit", "evacuation", "fire drill"], "points": -2, "reason": "Evacuation readiness described" }
+      ],
+      "minimum_score": -6,
+      "maximum_score": 12
+    },
+    "location": {
+      "label": "Location",
+      "midc_score": -2,
+      "outside_midc_score": 2,
+      "unknown_score": 3,
+      "sensitive_location_signals": [
+        { "terms": ["forest", "wildlife", "protected area", "wetland", "coastal regulation"], "points": 7, "reason": "Sensitive ecological area mentioned in location" },
+        { "terms": ["floodplain", "flood zone", "residential area", "school", "hospital"], "points": 4, "reason": "Flood-prone or sensitive neighboring use mentioned" }
+      ],
+      "maximum_signal_score": 10,
+      "proxy_note": "MIDC status is used only as a coarse planning-context proxy; it is not a geographic or regulatory determination."
+    }
+  }
+}
