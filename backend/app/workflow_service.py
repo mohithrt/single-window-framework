@@ -74,6 +74,12 @@ class WorkflowService:
             ))
         db.add_all(approvals)
         db.flush()
+        from app.sla_service import SlaService
+        sla = SlaService()
+        for approval in approvals:
+            approval.sla_duration_days = sla.duration(approval.department_code)
+            if approval.status == ApprovalStatus.PENDING.value:
+                sla.prime(approval)
         db.add(WorkflowAuditEvent(
             application_id=application.id,
             actor_user_id=actor_user_id,
@@ -85,6 +91,15 @@ class WorkflowService:
                 "dependencies": dependencies_by_code,
             },
         ))
+        db.add_all(WorkflowAuditEvent(
+            application_id=application.id,
+            approval_id=approval.id,
+            actor_user_id=actor_user_id,
+            department_code=approval.department_code,
+            action="DEPARTMENT_ASSIGNED",
+            message=f"{approval.department_name} assigned to review the application." if approval.is_required else None,
+            details={"is_required": approval.is_required, "initial_status": approval.status},
+        ) for approval in approvals if approval.is_required)
         db.flush()
         return approvals
 
@@ -98,10 +113,12 @@ class WorkflowService:
         to_status: str | None,
         message: str | None = None,
         details: dict | None = None,
+        department_code: str | None = None,
     ) -> WorkflowAuditEvent:
         event = WorkflowAuditEvent(
             application_id=approval.application_id,
             approval_id=approval.id,
+            department_code=department_code or approval.department_code,
             actor_user_id=actor_user_id,
             action=action,
             from_status=from_status,

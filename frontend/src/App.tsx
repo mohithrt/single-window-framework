@@ -7,6 +7,8 @@ import RiskAssessmentPage from './RiskAssessmentPage'
 import ApprovalStatusPage from './ApprovalStatusPage'
 import CriticalPathPage from './CriticalPathPage'
 import OfficerPortal from './OfficerPortal'
+import NotificationCenterPage from './NotificationCenterPage'
+import ApplicationActivityPage from './ApplicationActivityPage'
 
 type Role = 'APPLICANT' | 'OFFICER' | 'ADMIN'
 type User = { id: number; email: string; full_name: string; role: Role }
@@ -192,7 +194,7 @@ function DashboardPage({ expectedRole }: { expectedRole: Role }) {
 
   return (
     <div className="workspace">
-      <header className="workspace-topbar"><Brand /><nav aria-label="Main navigation"><a className="nav-active" href={dashboardFor[role]}>Overview</a><a href="#account">Account</a></nav><button className="signout-button" onClick={signOut}>Sign out <span>↗</span></button></header>
+      <header className="workspace-topbar"><Brand /><nav aria-label="Main navigation"><a className="nav-active" href={dashboardFor[role]}>Overview</a><a href="/notifications">Notifications</a></nav><button className="signout-button" onClick={signOut}>Sign out <span>↗</span></button></header>
       <aside className="workspace-sidebar"><div className="workspace-nav-label">WORKSPACE</div><a className="side-link selected" href={dashboardFor[role]}><span>◫</span> Overview</a><div className="sidebar-note"><span className="sidebar-note-mark">✳</span><strong>Faster, Smarter<br />Industrial Approvals</strong><small>North-Star · SIH 2026</small></div><div className="sidebar-bottom">MAHACLEAR-AI <span>·</span> v0.1</div></aside>
       <main className="workspace-main">
         <div className="breadcrumb">WORKSPACE <span>/</span> OVERVIEW</div>
@@ -205,7 +207,7 @@ function DashboardPage({ expectedRole }: { expectedRole: Role }) {
               <article className="workspace-card"><span className="workspace-card-icon green">{role === 'APPLICANT' ? '◎' : role === 'OFFICER' ? '▤' : '⌘'}</span><span className="card-kicker">ACCESS LEVEL</span><h3>{roleLabels[role]}</h3><p>Your role determines which workspace areas you can access.</p><span className="card-foot">ROLE VERIFIED <b>✓</b></span></article>
               <article className="workspace-card"><span className="workspace-card-icon sand">◷</span><span className="card-kicker">ACCOUNT</span><h3>{user.email}</h3><p>{role === 'OFFICER' ? `Department: ${String(data?.department ?? 'Not assigned')}` : role === 'ADMIN' ? `Registered users: ${String(data?.user_count ?? '—')}` : `Company: ${String(data?.company_id ? 'Linked to your profile' : 'Not added yet')}`}</p><span className="card-foot">ACCOUNT ACTIVE <b>✓</b></span></article>
             </section>
-            <section className="next-panel"><span className="next-icon">i</span><div><strong>Your secure workspace is ready</strong><p>Approval application and review features will appear here as they are added.</p></div><span className="phase-tag">FOUNDATION PHASE</span></section>
+            {role === 'ADMIN' ? <AdminEscalationPanel/> : <section className="next-panel"><span className="next-icon">i</span><div><strong>Your secure workspace is ready</strong><p>Approval application and review features will appear here as they are added.</p></div><span className="phase-tag">FOUNDATION PHASE</span></section>}
           </>
         )}
       </main>
@@ -214,10 +216,25 @@ function DashboardPage({ expectedRole }: { expectedRole: Role }) {
   )
 }
 
+function AdminEscalationPanel() {
+  const [data, setData] = useState<{ total: number; items: Array<{ approval_id: number; application_number: string; company_name: string | null; department_name: string; message: string | null; escalated_at: string | null }> } | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    const token = localStorage.getItem('mahaclear_access_token')
+    void fetch('/api/admin/escalations', { headers: { Authorization: `Bearer ${token}` } }).then(async (response) => {
+      const body = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(body.detail || 'Unable to load escalations.')
+      setData(body)
+    }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load escalations.'))
+  }, [])
+  return <section className="admin-escalation-panel"><div className="applications-panel-heading"><div><span className="card-kicker">SERVICE LEVEL OVERSIGHT</span><h2>Escalated approvals · {data?.total ?? 0}</h2></div></div>{error && <div className="applicant-error">{error}</div>}{data?.items.length ? data.items.map((item) => <article className="admin-escalation-row" key={item.approval_id}><span className="activity-status escalated">ESCALATED</span><div><strong>{item.application_number} · {item.department_name}</strong><small>{item.company_name || 'Company not provided'} · {item.message}</small></div></article>) : data && <p className="history-empty">No approval SLAs are escalated.</p>}</section>
+}
+
 export default function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/'
   if (path === '/register') return <RegisterPage />
   if (path === '/login' || path === '/') return <LoginPage />
+  if (path === '/notifications') return <NotificationCenterPage />
   if (path === '/applicant') return <ApplicantDashboard />
   if (path === '/applicant/applications/new') return <StartApplication />
   const prevalidationRoute = path.match(/^\/applicant\/applications\/(\d+)\/prevalidation$/)
@@ -228,6 +245,8 @@ export default function App() {
   if (approvalsRoute) return <ApprovalStatusPage applicationId={Number(approvalsRoute[1])} />
   const criticalPathRoute = path.match(/^\/applicant\/applications\/(\d+)\/critical-path$/)
   if (criticalPathRoute) return <CriticalPathPage applicationId={Number(criticalPathRoute[1])} />
+  const activityRoute = path.match(/^\/applicant\/applications\/(\d+)\/activity$/)
+  if (activityRoute) return <ApplicationActivityPage applicationId={Number(activityRoute[1])} />
   const applicationRoute = path.match(/^\/applicant\/applications\/(\d+)\/(edit|view)$/)
   if (applicationRoute) return <ApplicationWizard applicationId={Number(applicationRoute[1])} readOnly={applicationRoute[2] === 'view'} />
   const officerReviewRoute = path.match(/^\/officer\/approvals\/(\d+)$/)

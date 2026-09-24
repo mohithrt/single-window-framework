@@ -324,6 +324,10 @@ class ApplicationApproval(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sla_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sla_duration_days: Mapped[int | None] = mapped_column(Integer)
+    sla_expected_completion: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     application: Mapped[Application] = relationship(back_populates="approvals")
     assigned_reviewer: Mapped[User | None] = relationship()
@@ -331,13 +335,14 @@ class ApplicationApproval(Base):
     inspections: Mapped[list["Inspection"]] = relationship(
         back_populates="approval", cascade="all, delete-orphan", passive_deletes=True
     )
+    inspection_participations: Mapped[list["InspectionParticipant"]] = relationship(back_populates="approval")
 
 
 class Inspection(Base):
     __tablename__ = "inspections"
     __table_args__ = (
         CheckConstraint("inspection_type IN ('SINGLE', 'JOINT')", name="ck_inspections_type"),
-        CheckConstraint("status IN ('SCHEDULED', 'COMPLETED', 'CANCELLED')", name="ck_inspections_status"),
+        CheckConstraint("status IN ('SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')", name="ck_inspections_status"),
         Index("ix_inspections_scheduled_type", "scheduled_at", "inspection_type"),
         Index("ix_inspections_application_status", "application_id", "status"),
     )
@@ -351,12 +356,71 @@ class Inspection(Base):
     location: Mapped[str] = mapped_column(String(500), nullable=False)
     instructions: Mapped[str | None] = mapped_column(Text)
     scheduled_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    joint_inspection_id: Mapped[int | None] = mapped_column(ForeignKey("joint_inspections.id", ondelete="SET NULL"), index=True)
+    site: Mapped[str | None] = mapped_column(String(500))
+    checklist: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    findings: Mapped[str | None] = mapped_column(Text)
+    photos: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    remarks: Mapped[str | None] = mapped_column(Text)
+    recommendation: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     application: Mapped[Application] = relationship()
     approval: Mapped[ApplicationApproval] = relationship(back_populates="inspections")
-    scheduled_by: Mapped[User] = relationship()
+    scheduled_by: Mapped[User] = relationship(foreign_keys=[scheduled_by_user_id])
+    updated_by: Mapped[User | None] = relationship(foreign_keys=[updated_by_user_id])
+    joint_inspection: Mapped["JointInspection | None"] = relationship(back_populates="department_inspections")
+
+
+class JointInspection(Base):
+    __tablename__ = "joint_inspections"
+    __table_args__ = (
+        CheckConstraint("status IN ('SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')", name="ck_joint_inspections_status"),
+        Index("ix_joint_inspections_application_date", "application_id", "scheduled_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    site: Mapped[str] = mapped_column(String(500), nullable=False)
+    instructions: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="SCHEDULED", server_default="SCHEDULED")
+    checklist: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    findings: Mapped[str | None] = mapped_column(Text)
+    photos: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    remarks: Mapped[str | None] = mapped_column(Text)
+    recommendation: Mapped[str | None] = mapped_column(Text)
+    scheduled_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    application: Mapped[Application] = relationship()
+    scheduled_by: Mapped[User] = relationship(foreign_keys=[scheduled_by_user_id])
+    updated_by: Mapped[User | None] = relationship(foreign_keys=[updated_by_user_id])
+    department_inspections: Mapped[list[Inspection]] = relationship(back_populates="joint_inspection")
+    participants: Mapped[list["InspectionParticipant"]] = relationship(back_populates="joint_inspection", cascade="all, delete-orphan")
+
+
+class InspectionParticipant(Base):
+    __tablename__ = "inspection_participants"
+    __table_args__ = (
+        UniqueConstraint("joint_inspection_id", "approval_id", name="uq_inspection_participant_approval"),
+        Index("ix_inspection_participants_officer", "officer_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    joint_inspection_id: Mapped[int] = mapped_column(ForeignKey("joint_inspections.id", ondelete="CASCADE"), nullable=False)
+    approval_id: Mapped[int] = mapped_column(ForeignKey("application_approvals.id", ondelete="CASCADE"), nullable=False)
+    officer_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="INVITED", server_default="INVITED")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    joint_inspection: Mapped[JointInspection] = relationship(back_populates="participants")
+    approval: Mapped[ApplicationApproval] = relationship(back_populates="inspection_participations")
+    officer: Mapped[User | None] = relationship()
 
 
 class WorkflowAuditEvent(Base):
@@ -371,6 +435,7 @@ class WorkflowAuditEvent(Base):
     approval_id: Mapped[int | None] = mapped_column(ForeignKey("application_approvals.id", ondelete="SET NULL"))
     actor_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     action: Mapped[str] = mapped_column(String(48), nullable=False)
+    department_code: Mapped[str | None] = mapped_column(String(24), index=True)
     from_status: Mapped[str | None] = mapped_column(String(32))
     to_status: Mapped[str | None] = mapped_column(String(32))
     message: Mapped[str | None] = mapped_column(Text)
@@ -380,3 +445,23 @@ class WorkflowAuditEvent(Base):
     application: Mapped[Application] = relationship(back_populates="workflow_events")
     approval: Mapped[ApplicationApproval | None] = relationship(back_populates="audit_events")
     actor: Mapped[User] = relationship()
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_read_created", "user_id", "is_read", "created_at"),
+        Index("ix_notifications_application", "application_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    application_id: Mapped[int | None] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"))
+    notification_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    message: Mapped[str] = mapped_column(String(1000), nullable=False)
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship()
+    application: Mapped[Application | None] = relationship()

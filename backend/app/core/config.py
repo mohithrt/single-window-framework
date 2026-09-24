@@ -19,6 +19,9 @@ class Settings:
     demo_password: str = os.getenv("DEMO_PASSWORD", "MahaClearDemo2026!")
     upload_dir: str = os.getenv("UPLOAD_DIR", "uploads")
     workflow_rules_path: str = os.getenv("WORKFLOW_RULES_PATH", "")
+    sla_rules_path: str = os.getenv("SLA_RULES_PATH", "")
+    sla_check_interval_seconds: int = int(os.getenv("SLA_CHECK_INTERVAL_SECONDS", "300"))
+    redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 
 settings = Settings()

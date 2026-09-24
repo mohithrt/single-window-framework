@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import applications, auth, dashboards, officer, risks, workflow
+from app.routers import activity, applications, auth, dashboards, notifications, officer, risks, workflow
 
 app = FastAPI(
     title="MAHACLEAR-AI API",
@@ -27,6 +27,8 @@ app.include_router(risks.router, prefix="/api")
 app.include_router(workflow.applicant_router, prefix="/api")
 app.include_router(workflow.approval_router, prefix="/api")
 app.include_router(officer.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
+app.include_router(activity.router, prefix="/api")
 
 
 @app.get("/health", tags=["health"])

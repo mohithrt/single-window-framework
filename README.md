@@ -91,6 +91,12 @@ MahaClearDemo2026!
 - Department review actions are restricted to OFFICER and ADMIN: `POST /api/approvals/{id}/start-review`, `/approve`, `/reject`, `/request-correction`, `/request-inspection`, and `/escalate`.
 - Rejection requires a non-empty `reason`; correction, inspection, and escalation actions require a non-empty `message`. Applicants can acknowledge an uploaded correction with `POST /api/approvals/{id}/correction-submitted`.
 - Officer review details combine applicant and project data, saved risk assessment, document/OCR metadata, pre-validation findings, department statuses, inspections, remarks, and audit history. `POST /api/officer/approvals/{id}/remarks` saves an officer-only audit entry. `POST /api/officer/approvals/{id}/inspections` saves a single or joint inspection and updates the approval status; inspection rows are listed through `GET /api/officer/inspections`.
+- Officer inspection APIs support single inspections, joint inspection creation with multiple department approval participants, saved checklists, findings, remarks, recommendations, status updates, and authenticated photo uploads/downloads. Completing an inspection records audit events and returns participating approval records to review.
+- `GET /api/applications/{id}/sla` returns persisted start/duration/expected-completion values, remaining time, and SLA state. Edit `backend/app/config/sla_rules.json` to configure durations and warning days.
+- The Compose `sla-worker` periodically checks active approvals and writes `SLA_BREACHED` audit events, transitions overdue approvals to `ESCALATED`, and creates applicant/officer/admin notifications. Run one worker per environment, or coordinate replicas before scaling.
+- `GET /api/notifications` lists only the signed-in user's notifications; `PATCH /api/notifications/{id}/read` and `PATCH /api/notifications/read-all` persist read state.
+- `GET /api/applications/{id}/timeline` and `/audit` return real audit events. Applicant responses omit private officer remarks. `/api/applications/{id}/inspections` and `/sla` provide the applicant's inspection and service timeline.
+- `GET /api/admin/escalations` provides the admin escalation register; the officer escalation queue is available at `/api/officer/queue?status=ESCALATED`.
 
 The wizard saves draft edits after a short pause and also saves before changing steps or exiting. Company identity and submitted project details are stored as application snapshots. Documents are stored in the Compose `uploads_data` volume. The replaceable `DocumentProcessor` uses PyMuPDF text extraction and Tesseract OCR for scanned PDFs and images; Docker installs the English Tesseract data. Risk is assessed from saved rules and application data; expected completion is derived from the approval dependency schedule.
 
@@ -122,6 +128,14 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Do not use the example signing key or demo credentials outside local development. If you change `POSTGRES_USER`, `POSTGRES_PASSWORD`, or `POSTGRES_DB` in `.env`, update the matching credentials/database name inside `DATABASE_URL` too.
 
+For automatic SLA warnings and escalations outside Docker, open a second backend terminal, activate the same virtual environment, set the same `DATABASE_URL` and `SECRET_KEY`, then run:
+
+```powershell
+python -m app.sla_worker
+```
+
+The worker checks the database immediately and then at `SLA_CHECK_INTERVAL_SECONDS` (300 seconds by default). Keep one worker running per environment.
+
 ## Run frontend outside Docker
 
 Requirements: Node.js 20.19+ or 22.12+.
@@ -143,8 +157,8 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-The API tests use a temporary SQLite database for isolated registration, login, JWT, draft autosave, ownership checks, document upload/download/replacement, signature and size validation, duplicate detection, PAN consistency, risk tiers, configurable thresholds, risk history, stale-input detection, workflow selection, dependency activation, role protection, audit events, chained and parallel critical-path schedules, submission validation, dashboard counts, officer queue filtering, persisted review decisions, internal remarks, and single/joint inspection scheduling. The application and Compose configuration use PostgreSQL.
+The API tests use a temporary SQLite database for isolated registration, login, JWT, draft autosave, ownership checks, document upload/download/replacement, signature and size validation, duplicate detection, PAN consistency, risk tiers, configurable thresholds, risk history, stale-input detection, workflow selection, dependency activation, role protection, audit events, chained and parallel critical-path schedules, submission validation, dashboard counts, officer queue filtering, persisted review decisions, internal remarks, single and joint inspection scheduling/completion, SLA countdown/warnings/breach escalation, notifications and read state, and timeline privacy. The application and Compose configuration use PostgreSQL.
 
 ## Current scope
 
-The current database has `users`, `roles`, `companies`, `departments`, `applications`, `application_documents`, `application_validation_issues`, `risk_assessments`, `application_approvals`, `workflow_audit_events`, and `inspections` tables. The applicant experience covers an eight-step Applicant, Company, Project, Location, Industry, Documents, Review, and Submit wizard, plus pre-validation, risk assessment, approval status, and critical-path pages. The officer portal includes dashboard metrics, a filterable queue, review pages, inspections, documents, escalations, reports, and profile. Critical-path schedules are calculated on request from current approval records and do not require additional persisted graph tables.
+The current database includes users/roles/companies/departments, applications/documents/pre-validation, risk assessments, approval records/audit events, single and joint inspections with participants, SLA snapshots, and user notifications. The applicant experience includes the eight-step application wizard, pre-validation, risk assessment, approval status, critical-path, notification center, and activity/timeline pages. The officer portal includes dashboard metrics, a filterable queue, review pages, inspection management, documents, escalations, reports, and profile. Admins can view SLA escalations. Critical-path schedules are calculated from current approval records and do not require persisted graph tables.

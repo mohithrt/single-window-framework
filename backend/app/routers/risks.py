@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import CurrentUser, require_roles
-from app.models import Application, RiskAssessment, RoleCode
+from app.models import Application, RiskAssessment, RoleCode, WorkflowAuditEvent
 from app.risk_service import RiskService
 
 router = APIRouter(
@@ -79,6 +79,10 @@ def recalculate_risk_assessment(application_id: int, user: CurrentUser, db: Data
     )
     db.add(assessment)
     application.risk_tier = result["risk_tier"]
+    db.add(WorkflowAuditEvent(application_id=application.id, actor_user_id=user.id,
+        action="RISK_ASSESSED", message=f"Application risk assessed as {result['risk_tier']} ({result['risk_score']}/100).",
+        details={"assessment_id": assessment.id, "risk_score": result["risk_score"],
+                 "risk_tier": result["risk_tier"], "rules_version": result["rules_version"]}))
     db.commit()
     db.refresh(assessment)
     return assessment_payload(assessment, application, service)

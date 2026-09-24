@@ -70,6 +70,22 @@ services:
       backend:
         condition: service_healthy
 
+  sla-worker:
+    build:
+      context: ./backend
+    command: ["python", "-m", "app.sla_worker"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://mahaclear:change-this-local-password@postgres:5432/mahaclear}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SECRET_KEY: ${SECRET_KEY:-local-development-only-change-before-deployment-8d30e95f}
+      SLA_CHECK_INTERVAL_SECONDS: ${SLA_CHECK_INTERVAL_SECONDS:-300}
+      SLA_RULES_PATH: ${SLA_RULES_PATH:-}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      backend:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   redis_data:

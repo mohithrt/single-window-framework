@@ -23,7 +23,7 @@ from app.application_schemas import (
 from app.core.config import settings
 from app.database import get_db
 from app.dependencies import CurrentUser, require_roles
-from app.models import Application, ApplicationDocument, ApplicationStatus, RoleCode
+from app.models import Application, ApplicationDocument, ApplicationStatus, RoleCode, WorkflowAuditEvent
 from app.models import IndustryType, PollutionCategory
 from app.document_processor import DocumentProcessor, get_document_processor
 from app.prevalidation import DOCUMENT_LABELS, prevalidation_payload, run_prevalidation
@@ -139,6 +139,8 @@ def create_application(user: CurrentUser, db: Database) -> ApplicationRead:
     db.flush()
     application.application_number = f"MCAI-{datetime.now(UTC).year}-{application.id:06d}"
     application.progress_percent = application_progress(application, 0)
+    db.add(WorkflowAuditEvent(application_id=application.id, actor_user_id=user.id,
+        action="APPLICATION_CREATED", message="Application draft created.", details={}))
     db.commit()
     db.refresh(application)
     return to_read(application)
@@ -249,7 +251,14 @@ def upload_document(
     try:
         process_document(document, file_path, processor)
         db.flush()
-        run_prevalidation(db, application)
+        issues = run_prevalidation(db, application)
+        db.add(WorkflowAuditEvent(application_id=application.id, actor_user_id=user.id,
+            action="DOCUMENT_UPLOADED", message=f"{safe_name} uploaded and processed.",
+            details={"document_id": document.id, "document_type": document_type,
+                     "file_name": safe_name, "status": document.status}))
+        db.add(WorkflowAuditEvent(application_id=application.id, actor_user_id=user.id,
+            action="DOCUMENT_VALIDATED", message="Document pre-validation completed.",
+            details={"issue_count": len(issues), "document_id": document.id}))
         db.commit()
         db.refresh(document)
     except Exception:
@@ -304,7 +313,11 @@ def replace_document(
         if document.document_type == "ENVIRONMENTAL_DOCUMENTS":
             application.risk_tier = None
         process_document(document, new_path, processor)
-        run_prevalidation(db, application)
+        issues = run_prevalidation(db, application)
+        db.add(WorkflowAuditEvent(application_id=application.id, actor_user_id=user.id,
+            action="DOCUMENT_RESUBMITTED", message=f"{safe_name} replaced a previous upload.",
+            details={"document_id": document.id, "document_type": document.document_type,
+                     "issue_count": len(issues)}))
         db.commit()
         db.refresh(document)
     except Exception:
@@ -397,7 +410,10 @@ def delete_document(
     db.delete(document)
     db.flush()
     application.progress_percent = application_progress(application, len(application.documents))
-    run_prevalidation(db, application)
+    issues = run_prevalidation(db, application)
+    db.add(WorkflowAuditEvent(application_id=application.id, actor_user_id=user.id,
+        action="DOCUMENT_DELETED", message=f"{document.file_name} removed from the application.",
+        details={"document_id": document_id, "issue_count": len(issues)}))
     db.commit()
     if path.is_relative_to(root):
         path.unlink(missing_ok=True)
@@ -423,7 +439,10 @@ def submit_application(
                 document.status = "WARNING"
         else:
             document.status = "INVALID"
-    run_prevalidation(db, application)
+    issues = run_prevalidation(db, application)
+    db.add(WorkflowAuditEvent(application_id=application.id, actor_user_id=user.id,
+        action="DOCUMENT_VALIDATED", message="Application documents were pre-validated.",
+        details={"issue_count": len(issues), "document_count": len(application.documents)}))
     db.flush()
     validation_issues = db.scalars(select(ApplicationValidationIssue).where(
         ApplicationValidationIssue.application_id == application.id
@@ -453,6 +472,9 @@ def submit_application(
     application.submitted_at = datetime.now(UTC)
     application.progress_percent = 100
     WorkflowService().initialize(db, application, user.id)
+    db.add(WorkflowAuditEvent(application_id=application.id, actor_user_id=user.id,
+        action="APPLICATION_SUBMITTED", message="Application submitted for department review.",
+        details={"application_number": application.application_number}))
     db.commit()
     db.refresh(application)
     return to_read(load_owned_application(db, application.id, user.id))

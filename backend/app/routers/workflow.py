@@ -14,6 +14,8 @@ from app.models import (
 )
 from app.workflow_schemas import CorrectionRequest, RejectionRequest
 from app.workflow_service import WorkflowService
+from app.notification_service import notify_applicant, notify_staff
+from app.sla_service import SlaService
 
 applicant_router = APIRouter(prefix="/applications", tags=["approval workflow"])
 approval_router = APIRouter(prefix="/approvals", tags=["approval workflow"])
@@ -75,6 +77,7 @@ def _activate_ready(db: Session, application: Application, actor_id: int) -> Non
                 states.get(dependency) == ApprovalStatus.APPROVED.value for dependency in approval.depends_on
             ):
                 _transition(db, approval, actor_id, ApprovalStatus.PENDING, "APPROVAL_ACTIVATED")
+                SlaService().prime(approval)
                 states[approval.department_code] = ApprovalStatus.PENDING.value
                 changed = True
 
@@ -97,7 +100,7 @@ def _serialize(application: Application) -> dict:
         } for item in approvals],
         "audit_events": [{
             "id": event.id, "approval_id": event.approval_id,
-            "actor_name": event.actor.full_name if event.actor else "System",
+            "actor_name": "System" if (event.details or {}).get("system_actor") else event.actor.full_name if event.actor else "System",
             "action": event.action, "from_status": event.from_status,
             "to_status": event.to_status, "message": event.message,
             "details": event.details, "created_at": event.created_at,
@@ -148,6 +151,7 @@ def start_review(approval_id: int, user: OfficerUser, db: Database) -> dict:
     if approval.status not in {ApprovalStatus.PENDING.value, ApprovalStatus.INSPECTION_REQUIRED.value, ApprovalStatus.ESCALATED.value}:
         raise HTTPException(status_code=409, detail=f"Cannot start review from {approval.status}")
     approval.assigned_reviewer_id = user.id
+    SlaService().prime(approval)
     _transition(db, approval, user.id, ApprovalStatus.IN_REVIEW, "REVIEW_STARTED")
     approval.application.status = ApplicationStatus.IN_REVIEW.value
     db.commit()
@@ -160,6 +164,7 @@ def approve(approval_id: int, user: OfficerUser, db: Database) -> dict:
     if approval.status != ApprovalStatus.IN_REVIEW.value:
         raise HTTPException(status_code=409, detail="Approval must be in review before it can be approved")
     _transition(db, approval, user.id, ApprovalStatus.APPROVED, "APPROVED")
+    notify_applicant(db, approval.application, "APPROVAL_GRANTED", f"Your {approval.department_name} application was approved.")
     _activate_ready(db, approval.application, user.id)
     _refresh_application_status(db, approval.application)
     db.commit()
@@ -172,6 +177,7 @@ def reject(approval_id: int, payload: RejectionRequest, user: OfficerUser, db: D
     if approval.status != ApprovalStatus.IN_REVIEW.value:
         raise HTTPException(status_code=409, detail="Approval must be in review before it can be rejected")
     _transition(db, approval, user.id, ApprovalStatus.REJECTED, "REJECTED", payload.reason)
+    notify_applicant(db, approval.application, "APPROVAL_REJECTED", f"{approval.department_name} rejected the approval: {payload.reason}")
     _refresh_application_status(db, approval.application)
     db.commit()
     return {"approval_id": approval.id, "status": approval.status, "application_status": approval.application.status}
@@ -183,6 +189,7 @@ def request_correction(approval_id: int, payload: CorrectionRequest, user: Offic
     if approval.status != ApprovalStatus.IN_REVIEW.value:
         raise HTTPException(status_code=409, detail="Approval must be in review before requesting a correction")
     _transition(db, approval, user.id, ApprovalStatus.DOCUMENT_CORRECTION, "CORRECTION_REQUESTED", payload.message)
+    notify_applicant(db, approval.application, "CORRECTION_REQUIRED", f"{approval.department_name} requested additional information: {payload.message}")
     _refresh_application_status(db, approval.application)
     db.commit()
     return {"approval_id": approval.id, "status": approval.status, "application_status": approval.application.status}
@@ -196,6 +203,8 @@ def correction_submitted(approval_id: int, user: CurrentUser, db: Database) -> d
     if approval.status != ApprovalStatus.DOCUMENT_CORRECTION.value:
         raise HTTPException(status_code=409, detail="This approval is not waiting for a correction")
     _transition(db, approval, user.id, ApprovalStatus.PENDING, "CORRECTION_SUBMITTED", "Applicant submitted the requested correction.")
+    notify_staff(db, approval.application, "CORRECTION_SUBMITTED",
+                 f"The applicant submitted a correction for {approval.department_name}.", approval.assigned_reviewer_id)
     _refresh_application_status(db, approval.application)
     db.commit()
     return {"approval_id": approval.id, "status": approval.status, "application_status": approval.application.status}
@@ -207,6 +216,7 @@ def request_inspection(approval_id: int, payload: CorrectionRequest, user: Offic
     if approval.status != ApprovalStatus.IN_REVIEW.value:
         raise HTTPException(status_code=409, detail="Approval must be in review to require inspection")
     _transition(db, approval, user.id, ApprovalStatus.INSPECTION_REQUIRED, "INSPECTION_REQUIRED", payload.message)
+    notify_applicant(db, approval.application, "INSPECTION_REQUIRED", f"{approval.department_name} requires a site inspection.")
     approval.application.status = ApplicationStatus.IN_REVIEW.value
     db.commit()
     return {"approval_id": approval.id, "status": approval.status}
@@ -218,6 +228,7 @@ def escalate(approval_id: int, payload: CorrectionRequest, user: OfficerUser, db
     if approval.status not in {ApprovalStatus.PENDING.value, ApprovalStatus.IN_REVIEW.value}:
         raise HTTPException(status_code=409, detail=f"Cannot escalate from {approval.status}")
     _transition(db, approval, user.id, ApprovalStatus.ESCALATED, "ESCALATED", payload.message)
+    notify_applicant(db, approval.application, "APPLICATION_ESCALATED", f"Your application was escalated by {approval.department_name}.")
     approval.application.status = ApplicationStatus.IN_REVIEW.value
     db.commit()
     return {"approval_id": approval.id, "status": approval.status}

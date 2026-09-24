@@ -1,0 +1,13 @@
+{
+  "version": "2026.1",
+  "warning_days": 3,
+  "departments": {
+    "MPCB": 15,
+    "MIDC": 10,
+    "FIRE_SERVICES": 7,
+    "DISH": 12,
+    "GSTN": 7,
+    "MCA21": 7,
+    "UDYAM": 7
+  }
+}

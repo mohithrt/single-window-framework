@@ -66,7 +66,7 @@ export default function ApplicantDashboard() {
     <div className="applicant-shell">
       <header className="applicant-topbar">
         <a className="brand" href="/applicant"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a>
-        <nav className="applicant-top-nav" aria-label="Applicant navigation"><a className="active" href="/applicant">Dashboard</a><a href="#applications">Applications</a></nav>
+        <nav className="applicant-top-nav" aria-label="Applicant navigation"><a className="active" href="/applicant">Dashboard</a><a href="#applications">Applications</a><a href="/notifications">Notifications</a></nav>
         <button className="applicant-signout" onClick={() => { localStorage.removeItem('mahaclear_access_token'); window.location.assign('/login') }}>Sign out <span>↗</span></button>
       </header>
       <aside className="applicant-sidebar">
@@ -110,7 +110,7 @@ export default function ApplicantDashboard() {
                         <td><div className="progress-cell"><div className="progress-track"><i style={{ width: `${application.progress_percent}%` }} /></div><span>{application.progress_percent}%</span></div></td>
                         <td>{application.current_department_name || (isDraft ? 'Not assigned' : 'Awaiting assignment')}</td>
                         <td>{formatDate(application.expected_completion_at)}</td>
-                        <td><a className="table-action" href={href}>{isDraft ? 'Edit draft' : 'View'} <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/risk`}>Risk assessment <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/approvals`}>Approvals <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/critical-path`}>Critical path <span>→</span></a></td>
+                        <td><a className="table-action" href={href}>{isDraft ? 'Edit draft' : 'View'} <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/risk`}>Risk assessment <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/approvals`}>Approvals <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/critical-path`}>Critical path <span>→</span></a>{!isDraft && <a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/activity`}>Timeline & inspections <span>→</span></a>}</td>
                       </tr>
                     })}</tbody>
                   </table>

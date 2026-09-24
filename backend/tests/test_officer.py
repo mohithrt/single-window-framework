@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from app.database import SessionLocal
 from app.models import (
-    Application, ApplicationApproval, ApplicationStatus, Inspection,
+    Application, ApplicationApproval, ApplicationStatus, Inspection, InspectionParticipant,
     WorkflowAuditEvent,
 )
 
@@ -114,32 +114,102 @@ def test_review_actions_persist_and_internal_remarks_are_private(client) -> None
 
 
 def test_officer_can_schedule_and_list_single_and_joint_inspections(client) -> None:
-    _application_id, approval_id, _ = _submitted_application(client, "officer-inspection-owner@example.com")
+    application_id, approval_id, applicant_headers = _submitted_application(client, "officer-inspection-owner@example.com")
     officer_headers = _login(client, "officer@example.com")
     assert client.post(f"/api/approvals/{approval_id}/start-review", headers=officer_headers).status_code == 200
 
     scheduled_at = (datetime.now(UTC) + timedelta(days=3)).isoformat()
     inspection = client.post(f"/api/officer/approvals/{approval_id}/inspections", headers=officer_headers, json={
-        "inspection_type": "JOINT", "scheduled_at": scheduled_at,
+        "inspection_type": "SINGLE", "scheduled_at": scheduled_at,
         "location": "Chakan MIDC, Pune", "instructions": "Bring fire and environment officers.",
     })
     assert inspection.status_code == 201, inspection.text
-    assert inspection.json()["inspection_type"] == "JOINT"
+    assert inspection.json()["inspection_type"] == "SINGLE"
     assert inspection.json()["status"] == "SCHEDULED"
 
-    listed = client.get("/api/officer/inspections?inspection_type=JOINT", headers=officer_headers)
+    listed = client.get("/api/officer/inspections?inspection_type=SINGLE", headers=officer_headers)
     assert listed.status_code == 200
     assert listed.json()["total"] == 1
     assert listed.json()["items"][0]["location"] == "Chakan MIDC, Pune"
-    single = client.get("/api/officer/inspections?inspection_type=SINGLE", headers=officer_headers)
-    assert single.status_code == 200 and single.json()["total"] == 0
+    joint = client.get("/api/officer/inspections?inspection_type=JOINT", headers=officer_headers)
+    assert joint.status_code == 200 and joint.json()["total"] == 0
+    image = b"\x89PNG\r\n\x1a\n" + b"demo-png-content"
+    uploaded_photo = client.post(f"/api/officer/inspections/{inspection.json()['id']}/photos",
+                                 headers=officer_headers,
+                                 files=[("files", ("visit.png", image, "image/png"))])
+    assert uploaded_photo.status_code == 201, uploaded_photo.text
+    photo = client.get(f"/api/officer/inspections/{inspection.json()['id']}/photos/0", headers=officer_headers)
+    assert photo.status_code == 200 and photo.content == image
+    applicant_photos = client.get(f"/api/applications/{application_id}/inspections", headers=applicant_headers)
+    assert applicant_photos.status_code == 200
+    photo_url = applicant_photos.json()["items"][0]["photos"][0]["download_url"]
+    assert photo_url.endswith(f"/single/{inspection.json()['id']}/photos/0")
+    assert client.get(photo_url, headers=applicant_headers).content == image
+    in_progress = client.patch(f"/api/officer/inspections/{inspection.json()['id']}", headers=officer_headers,
+                               json={"status": "IN_PROGRESS", "findings": "Site walk-through started."})
+    assert in_progress.status_code == 200
+    completed = client.patch(f"/api/officer/inspections/{inspection.json()['id']}", headers=officer_headers,
+                             json={"status": "COMPLETED", "recommendation": "Approve after checklist closure."})
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["status"] == "COMPLETED"
     with SessionLocal() as db:
         saved = db.scalar(select(Inspection).where(Inspection.approval_id == approval_id))
-        assert saved is not None and saved.inspection_type == "JOINT"
+        assert saved is not None and saved.inspection_type == "SINGLE"
         approval = db.get(ApplicationApproval, approval_id)
-        assert approval.status == "INSPECTION_REQUIRED"
+        assert approval.status == "IN_REVIEW"
         event = db.scalar(select(WorkflowAuditEvent).where(
             WorkflowAuditEvent.approval_id == approval_id,
             WorkflowAuditEvent.action == "INSPECTION_SCHEDULED",
         ))
         assert event is not None
+
+
+def test_joint_inspection_participants_completion_audit_and_notifications(client) -> None:
+    application_id, _approval_id, applicant_headers = _submitted_application(client, "joint-owner@example.com")
+    officer_headers = _login(client, "officer@example.com")
+    with SessionLocal() as db:
+        approval_ids = db.scalars(select(ApplicationApproval.id).where(
+            ApplicationApproval.application_id == application_id,
+            ApplicationApproval.department_code.in_(["MPCB", "DISH"]),
+        )).all()
+    assert len(approval_ids) == 2
+    scheduled_at = (datetime.now(UTC) + timedelta(days=5)).isoformat()
+    response = client.post("/api/officer/joint-inspections", headers=officer_headers, json={
+        "application_id": application_id, "approval_ids": approval_ids,
+        "scheduled_at": scheduled_at, "site": "Chakan MIDC, Pune",
+        "instructions": "Fire, safety, and pollution review in one visit.",
+        "checklist": [{"item": "PPE available", "required": True}],
+    })
+    assert response.status_code == 201, response.text
+    joint_id = response.json()["id"]
+    assert {row["department_code"] for row in response.json()["participants"]} == {"MPCB", "DISH"}
+    listed = client.get("/api/officer/inspections?inspection_type=JOINT", headers=officer_headers)
+    assert listed.status_code == 200 and listed.json()["total"] == 1
+    assert listed.json()["items"][0]["id"] == joint_id
+
+    running = client.patch(f"/api/officer/joint-inspections/{joint_id}", headers=officer_headers,
+                           json={"status": "IN_PROGRESS", "findings": "Site walk-through started."})
+    assert running.status_code == 200 and running.json()["status"] == "IN_PROGRESS"
+    complete = client.patch(f"/api/officer/joint-inspections/{joint_id}", headers=officer_headers, json={
+        "status": "COMPLETED", "findings": "All safety exits were verified.",
+        "recommendation": "Approve subject to the submitted fire plan.",
+        "remarks": "Inspectors agreed the site is ready.",
+    })
+    assert complete.status_code == 200, complete.text
+    assert complete.json()["status"] == "COMPLETED"
+    applicant_notice = client.get("/api/notifications", headers=applicant_headers).json()
+    assert any(item["notification_type"] == "JOINT_INSPECTION_SCHEDULED" for item in applicant_notice["items"])
+    assert any(item["notification_type"] == "INSPECTION_COMPLETED" for item in applicant_notice["items"])
+    assert client.patch(f"/api/notifications/{applicant_notice['items'][0]['id']}/read",
+                        headers=applicant_headers).status_code == 200
+    timeline = client.get(f"/api/applications/{application_id}/timeline", headers=applicant_headers).json()
+    assert any(row["action"] == "INSPECTION_COMPLETED" for row in timeline["events"])
+    with SessionLocal() as db:
+        participants = db.scalars(select(InspectionParticipant).where(
+            InspectionParticipant.joint_inspection_id == joint_id
+        )).all()
+        assert len(participants) == 2 and all(participant.status == "COMPLETED" for participant in participants)
+        statuses = db.scalars(select(ApplicationApproval.status).where(
+            ApplicationApproval.id.in_(approval_ids)
+        )).all()
+        assert statuses == ["IN_REVIEW", "IN_REVIEW"]
