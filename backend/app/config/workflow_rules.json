@@ -1,5 +1,15 @@
 {
   "version": "1.0.0",
+  "document_requirements": {
+    "MPCB": ["ENVIRONMENTAL_DOCUMENTS"],
+    "MIDC": ["LAND_OWNERSHIP_LEASE", "BUILDING_PLAN"],
+    "DISH": ["FACTORY_DOCUMENTS", "BUILDING_PLAN"],
+    "FIRE_SERVICES": ["FIRE_SAFETY_DOCUMENTS", "BUILDING_PLAN"],
+    "GSTN": ["GST_CERTIFICATE"],
+    "MCA21": ["INCORPORATION_CERTIFICATE"],
+    "UDYAM": ["UDYAM_CERTIFICATE"]
+  },
+  "fee_schedule": {},
   "departments": [
     {
       "code": "MPCB",

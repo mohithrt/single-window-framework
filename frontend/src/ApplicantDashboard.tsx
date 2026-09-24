@@ -61,18 +61,23 @@ export default function ApplicantDashboard() {
   }
 
   const summary = data?.summary
+  const activeApplications = (data?.applications ?? []).filter(application => ['SUBMITTED', 'IN_REVIEW', 'ACTION_REQUIRED'].includes(application.status))
+  const overdueApplication = activeApplications.find(application => application.expected_completion_at && new Date(application.expected_completion_at).getTime() < Date.now())
+  const focusApplication = overdueApplication ?? activeApplications.find(application => application.status === 'ACTION_REQUIRED') ?? activeApplications[0]
 
   return (
     <div className="applicant-shell">
       <header className="applicant-topbar">
         <a className="brand" href="/applicant"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a>
-        <nav className="applicant-top-nav" aria-label="Applicant navigation"><a className="active" href="/applicant">Dashboard</a><a href="#applications">Applications</a><a href="/notifications">Notifications</a></nav>
+        <nav className="applicant-top-nav" aria-label="Applicant navigation"><a className="active" href="/applicant">Dashboard</a><a href="#applications">Applications</a><a href="/applicant/fees">Fees</a><a href="/notifications">Notifications</a></nav>
         <button className="applicant-signout" onClick={() => { localStorage.removeItem('mahaclear_access_token'); window.location.assign('/login') }}>Sign out <span>↗</span></button>
       </header>
       <aside className="applicant-sidebar">
         <div className="workspace-nav-label">APPLICANT WORKSPACE</div>
         <a className="side-link selected" href="/applicant"><span>◫</span> Dashboard</a>
         <a className="side-link" href="#applications"><span>▤</span> My applications</a>
+        <a className="side-link" href="/applicant/fees"><span>₹</span> Fee ledger</a>
+        <a className="side-link" href="/notifications"><span>◉</span> Notifications</a>
         <div className="sidebar-note"><span className="sidebar-note-mark">✳</span><strong>One window.<br />Every approval.</strong><small>North-Star · SIH 2026</small></div>
         <div className="sidebar-bottom">MAHACLEAR-AI <span>·</span> APPLICANT</div>
       </aside>
@@ -83,7 +88,7 @@ export default function ApplicantDashboard() {
           <button className="primary-button new-application-button" onClick={startApplication} disabled={creating}>{creating ? 'Preparing draft…' : 'New application'} <span>＋</span></button>
         </div>
         {error && <div className="applicant-error" role="alert">{error} <button onClick={() => window.location.reload()}>Retry</button></div>}
-        {!data && !error ? <div className="loading-panel">Loading your applications…</div> : (
+        {!data ? (!error ? <div className="loading-panel" role="status">Loading your applications…</div> : null) : (
           <>
             <section className="application-stats" aria-label="Application totals">
               <Stat label="TOTAL APPLICATIONS" value={summary?.total_applications ?? 0} icon="▤" tone="green" />
@@ -91,6 +96,23 @@ export default function ApplicantDashboard() {
               <Stat label="APPROVED" value={summary?.approved ?? 0} icon="✓" tone="green" />
               <Stat label="REJECTED" value={summary?.rejected ?? 0} icon="×" tone="red" />
               <Stat label="ACTION REQUIRED" value={summary?.action_required ?? 0} icon="!" tone="amber" />
+            </section>
+            <section className="applicant-focus-grid" aria-label="Application attention summary">
+              <article className={focusApplication?.status === 'ACTION_REQUIRED' ? 'attention' : ''}>
+                <span>WHAT NEEDS ATTENTION</span>
+                <strong>{focusApplication ? (focusApplication.status === 'ACTION_REQUIRED' ? 'Applicant action required' : overdueApplication ? 'Expected date passed' : 'Reviews underway') : 'No active applications'}</strong>
+                <small>{focusApplication ? focusApplication.application_number + ' · ' + (focusApplication.company_name || 'Company details pending') : 'Start an application when you are ready.'}</small>
+              </article>
+              <article className={overdueApplication ? 'delayed' : ''}>
+                <span>{overdueApplication ? 'DEPARTMENT PAST ESTIMATE' : 'CURRENT REVIEW DEPARTMENT'}</span>
+                <strong>{focusApplication?.current_department_name || (focusApplication ? 'Awaiting assignment' : '—')}</strong>
+                <small>{focusApplication ? (focusApplication.industry_type || 'Application') + ' · ' + statusLabel(focusApplication.status as Parameters<typeof statusLabel>[0]) : 'No active review is in progress.'}</small>
+              </article>
+              <article>
+                <span>NEXT ESTIMATED COMPLETION</span>
+                <strong>{focusApplication?.expected_completion_at ? formatDate(focusApplication.expected_completion_at) : 'No estimate yet'}</strong>
+                <small>Estimate for {focusApplication?.application_number || 'your active application'} · Dates may change during review.</small>
+              </article>
             </section>
             <section className="applications-panel" id="applications">
               <div className="applications-panel-heading"><div><span className="card-kicker">YOUR APPLICATIONS</span><h2>Application register</h2></div><span className="application-count">{data?.applications.length ?? 0} RECORDS</span></div>
@@ -105,12 +127,12 @@ export default function ApplicantDashboard() {
                         <td className="application-number">{application.application_number}</td>
                         <td>{application.company_name || 'Company not entered'}</td>
                         <td>{application.industry_type || 'Not selected'}</td>
-                        <td><span className="not-assessed">{application.risk_tier || 'Not assessed'}</span></td>
+                        <td><span className={application.risk_tier ? 'officer-risk ' + application.risk_tier.toLowerCase() : 'not-assessed'}>{application.risk_tier || 'Not assessed'}</span></td>
                         <td><StatusPill status={application.status} /></td>
                         <td><div className="progress-cell"><div className="progress-track"><i style={{ width: `${application.progress_percent}%` }} /></div><span>{application.progress_percent}%</span></div></td>
                         <td>{application.current_department_name || (isDraft ? 'Not assigned' : 'Awaiting assignment')}</td>
                         <td>{formatDate(application.expected_completion_at)}</td>
-                        <td><a className="table-action" href={href}>{isDraft ? 'Edit draft' : 'View'} <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/risk`}>Risk assessment <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/approvals`}>Approvals <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/critical-path`}>Critical path <span>→</span></a>{!isDraft && <a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/activity`}>Timeline & inspections <span>→</span></a>}</td>
+                        <td><a className="table-action" href={href}>{isDraft ? 'Edit draft' : 'View'} <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/risk`}>Risk assessment <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/approvals`}>Approvals <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/critical-path`}>Critical path <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/assistant`}>Ask MahaClear AI <span>→</span></a>{!isDraft && <a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/activity`}>Timeline & inspections <span>→</span></a>}</td>
                       </tr>
                     })}</tbody>
                   </table>
@@ -130,6 +152,6 @@ function Stat({ label, value, icon, tone }: { label: string; value: number; icon
 }
 
 function StatusPill({ status }: { status: string }) {
-  const tone = status === 'APPROVED' ? 'approved' : status === 'REJECTED' ? 'rejected' : status === 'ACTION_REQUIRED' ? 'action' : status === 'DRAFT' ? 'draft' : 'pending'
+  const tone = status === 'APPROVED' ? 'approved' : status === 'REJECTED' ? 'rejected' : status === 'ACTION_REQUIRED' ? 'action' : status === 'IN_REVIEW' ? 'in-review' : status === 'DRAFT' ? 'draft' : 'pending'
   return <span className={`status-pill ${tone}`}><i />{statusLabel(status as Parameters<typeof statusLabel>[0])}</span>
 }

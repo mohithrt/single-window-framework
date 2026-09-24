@@ -80,6 +80,9 @@ services:
       SECRET_KEY: ${SECRET_KEY:-local-development-only-change-before-deployment-8d30e95f}
       SLA_CHECK_INTERVAL_SECONDS: ${SLA_CHECK_INTERVAL_SECONDS:-300}
       SLA_RULES_PATH: ${SLA_RULES_PATH:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_BASE_URL: ${LLM_API_BASE_URL:-https://api.openai.com/v1/chat/completions}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
     volumes:
       - ./backend:/app
     depends_on:

@@ -22,6 +22,9 @@ class Settings:
     sla_rules_path: str = os.getenv("SLA_RULES_PATH", "")
     sla_check_interval_seconds: int = int(os.getenv("SLA_CHECK_INTERVAL_SECONDS", "300"))
     redis_url: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    llm_api_key: str = os.getenv("LLM_API_KEY", "")
+    llm_api_base_url: str = os.getenv("LLM_API_BASE_URL", "https://api.openai.com/v1/chat/completions")
+    llm_model: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
 
 settings = Settings()

@@ -465,3 +465,85 @@ class Notification(Base):
 
     user: Mapped[User] = relationship()
     application: Mapped[Application | None] = relationship()
+
+
+class ApplicationFee(Base):
+    """Read-only fee ledger entries attached to an application."""
+    __tablename__ = "application_fees"
+    __table_args__ = (
+        UniqueConstraint("application_id", "fee_code", name="uq_application_fees_code"),
+        CheckConstraint("amount >= 0", name="ck_application_fees_amount"),
+        CheckConstraint("status IN ('ESTIMATED', 'DUE', 'PAID', 'WAIVED')", name="ck_application_fees_status"),
+        Index("ix_application_fees_application_status", "application_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    fee_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    description: Mapped[str] = mapped_column(String(200), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR", server_default="INR")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="ESTIMATED", server_default="ESTIMATED")
+    due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    receipt_reference: Mapped[str | None] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    application: Mapped[Application] = relationship()
+
+
+class AIChatSession(Base):
+    __tablename__ = "ai_chat_sessions"
+    __table_args__ = (
+        Index("ix_ai_chat_sessions_user_application", "user_id", "application_id", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="Application assistant")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    user: Mapped[User] = relationship()
+    application: Mapped[Application] = relationship()
+    messages: Mapped[list["AIChatMessage"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+
+
+class AIChatMessage(Base):
+    __tablename__ = "ai_chat_messages"
+    __table_args__ = (
+        Index("ix_ai_chat_messages_session_created", "session_id", "created_at"),
+        CheckConstraint("role IN ('USER', 'ASSISTANT')", name="ck_ai_chat_messages_role"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("ai_chat_sessions.id", ondelete="CASCADE"), nullable=False)
+    role: Mapped[str] = mapped_column(String(12), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    structured_data: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    session: Mapped[AIChatSession] = relationship(back_populates="messages")
+
+
+class IntegrationTransaction(Base):
+    __tablename__ = "integration_transactions"
+    __table_args__ = (
+        Index("ix_integration_transactions_provider_created", "provider_code", "created_at"),
+        Index("ix_integration_transactions_application", "application_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    provider_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    application_id: Mapped[int | None] = mapped_column(ForeignKey("applications.id", ondelete="SET NULL"))
+    submitted_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    reference: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    request_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    response_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    application: Mapped[Application | None] = relationship()
+    submitted_by: Mapped[User] = relationship()

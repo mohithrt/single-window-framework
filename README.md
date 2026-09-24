@@ -44,6 +44,10 @@ docker compose up --build
 
 Compose starts PostgreSQL and Redis, waits for them to be healthy, applies Alembic migrations, seeds the demo roles and accounts, then starts the API and frontend.
 
+After startup, populate the presentation scenarios from the backend directory with python -m app.seed_demo_data seed. This repeatable command replaces only its ten reserved MCAI-DEMO-2026 fixtures. It creates named industrial scenarios with connected workflow statuses, rule-scored risks, clearly marked sample PDFs and OCR metadata, validation findings, SLA states, inspections, fee entries, notifications, and audit events. Use python -m app.seed_demo_data reset to remove only those scenarios while preserving demo accounts and other applications.
+
+Sample PDFs and fee entries are prototype data. The fee ledger contains estimates only; it does not represent statutory government charges or real payments.
+
 - Frontend: <http://localhost:5173>
 - API docs: <http://localhost:8000/docs>
 - API liveness: <http://localhost:8000/health>
@@ -161,4 +165,10 @@ The API tests use a temporary SQLite database for isolated registration, login, 
 
 ## Current scope
 
-The current database includes users/roles/companies/departments, applications/documents/pre-validation, risk assessments, approval records/audit events, single and joint inspections with participants, SLA snapshots, and user notifications. The applicant experience includes the eight-step application wizard, pre-validation, risk assessment, approval status, critical-path, notification center, and activity/timeline pages. The officer portal includes dashboard metrics, a filterable queue, review pages, inspection management, documents, escalations, reports, and profile. Admins can view SLA escalations. Critical-path schedules are calculated from current approval records and do not require persisted graph tables.
+The current database includes users/roles/companies/departments, applications/documents/pre-validation, risk assessments, approval records/audit events, single and joint inspections with participants, SLA snapshots, notifications, AI chat history, mock integration logs, and a read-only fee ledger. The applicant experience includes the eight-step application wizard, pre-validation, risk assessment, approval status, critical-path, notification center, and activity/timeline pages. The officer portal includes dashboard metrics, a filterable queue, review pages, inspection management, documents, escalations, reports, and profile. Admins can view SLA escalations. Critical-path schedules are calculated from current approval records and do not require persisted graph tables.
+
+Government admins now have a database-backed Apex Authority dashboard at `/admin`. `GET /api/admin/analytics` calculates application KPIs, approval-time and SLA rates, risk distribution, monthly volume, rejection reasons, department comparisons, and bottlenecks from saved PostgreSQL records. Admins can inspect application details and generated critical paths at `/admin/applications/{id}`, review `/api/admin/audit`, and inspect configured rules at `/api/admin/rules`.
+
+Applicants can open **Ask MahaClear AI** from an application. `POST /api/applications/{id}/what-if` compares structured proposed changes using the same `RiskService` and `WorkflowService` rule files used by saved assessments and approval/critical-path planning. `POST /api/applications/{id}/assistant/chat` answers application-scoped questions and saves sessions/messages in PostgreSQL. Without `LLM_API_KEY`, replies use the labeled deterministic **Demo AI / Rule-based response**. When a key is configured, an optional language layer can only rephrase deterministic evidence; provider errors fall back without blocking the response. The applicant fee ledger is available from GET /api/fees and GET /api/fees/{application_id}; its prototype estimates are not statutory charges and payment processing is not connected.
+
+`GET /api/admin/integrations/providers`, `POST /api/admin/integrations/{provider}/submit`, and the transaction status/response routes expose mock MPCB, MIDC, DISH, Fire, GST, MCA, Udyam, DigiLocker, Email, and SMS providers. Requests and responses are persisted in `integration_transactions`. These are prototype mocks; no government or utility API, document locker, email service, SMS carrier, or real verification is connected. Replace the `IntegrationProvider` implementation to add a real provider after its interface and credentials are established.

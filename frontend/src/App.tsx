@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import ApplicantDashboard from './ApplicantDashboard'
 import ApplicationWizard, { StartApplication } from './ApplicationWizard'
@@ -9,22 +9,19 @@ import CriticalPathPage from './CriticalPathPage'
 import OfficerPortal from './OfficerPortal'
 import NotificationCenterPage from './NotificationCenterPage'
 import ApplicationActivityPage from './ApplicationActivityPage'
+import AdminDashboardPage from './AdminDashboardPage'
+import MahaClearAssistantPage from './MahaClearAssistantPage'
+import { AdminApplicationPage, AdminAuditPage } from './AdminInspectionPages'
+import ApplicantFeesPage from './ApplicantFeesPage'
 
 type Role = 'APPLICANT' | 'OFFICER' | 'ADMIN'
 type User = { id: number; email: string; full_name: string; role: Role }
 type AuthResult = { access_token: string; user: User }
-type DashboardData = Record<string, string | number | null>
 
 const dashboardFor: Record<Role, string> = {
   APPLICANT: '/applicant',
   OFFICER: '/officer',
   ADMIN: '/admin',
-}
-
-const roleLabels: Record<Role, string> = {
-  APPLICANT: 'Applicant',
-  OFFICER: 'Department officer',
-  ADMIN: 'Government administrator',
 }
 
 function redirect(path: string) {
@@ -152,90 +149,13 @@ function Brand() {
   return <a className="brand" href="/login"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a>
 }
 
-function DashboardPage({ expectedRole }: { expectedRole: Role }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    const token = localStorage.getItem('mahaclear_access_token')
-    if (!token) { redirect('/login'); return }
-    const headers = { Authorization: `Bearer ${token}` }
-
-    async function load() {
-      try {
-        const who = await fetch('/api/auth/me', { headers })
-        if (!who.ok) throw new Error('Please sign in again.')
-        const currentUser: User = await who.json()
-        if (currentUser.role !== expectedRole) { redirect(dashboardFor[currentUser.role]); return }
-        setUser(currentUser)
-
-        const endpoint = expectedRole === 'APPLICANT' ? '/api/applicant/dashboard'
-          : expectedRole === 'OFFICER' ? '/api/officer/department' : '/api/admin/overview'
-        const dashboard = await fetch(endpoint, { headers })
-        if (!dashboard.ok) throw new Error('Could not load your workspace.')
-        setData(await dashboard.json())
-      } catch (caught) {
-        localStorage.removeItem('mahaclear_access_token')
-        setError(caught instanceof Error ? caught.message : 'Could not load your workspace.')
-      }
-    }
-    void load()
-  }, [expectedRole])
-
-  function signOut() {
-    localStorage.removeItem('mahaclear_access_token')
-    redirect('/login')
-  }
-
-  const role = expectedRole
-  const title = role === 'APPLICANT' ? 'Applicant dashboard' : role === 'OFFICER' ? 'Department dashboard' : 'Government administration'
-  const intro = role === 'APPLICANT' ? 'Your single-window workspace for industrial approvals.' : role === 'OFFICER' ? 'Your department workspace and assigned responsibilities.' : 'Your government administration workspace.'
-
-  return (
-    <div className="workspace">
-      <header className="workspace-topbar"><Brand /><nav aria-label="Main navigation"><a className="nav-active" href={dashboardFor[role]}>Overview</a><a href="/notifications">Notifications</a></nav><button className="signout-button" onClick={signOut}>Sign out <span>↗</span></button></header>
-      <aside className="workspace-sidebar"><div className="workspace-nav-label">WORKSPACE</div><a className="side-link selected" href={dashboardFor[role]}><span>◫</span> Overview</a><div className="sidebar-note"><span className="sidebar-note-mark">✳</span><strong>Faster, Smarter<br />Industrial Approvals</strong><small>North-Star · SIH 2026</small></div><div className="sidebar-bottom">MAHACLEAR-AI <span>·</span> v0.1</div></aside>
-      <main className="workspace-main">
-        <div className="breadcrumb">WORKSPACE <span>/</span> OVERVIEW</div>
-        <div className="dashboard-heading"><div><span className="eyebrow"><i /> {roleLabels[role].toUpperCase()} WORKSPACE</span><h1>{title}</h1><p>{intro}</p></div><span className="access-badge">{roleLabels[role]}</span></div>
-        {error ? <div className="workspace-error" role="alert">{error} <a href="/login">Sign in</a></div> : !user ? <div className="loading-panel">Loading your secure workspace…</div> : (
-          <>
-            <section className="welcome-card"><div><span className="card-kicker">WELCOME TO YOUR WORKSPACE</span><h2>Hello, {user.full_name.split(' ')[0]}.</h2><p>{role === 'APPLICANT' ? 'Your account is ready. Your approval workspace is set up for you.' : role === 'OFFICER' ? 'You’re signed in to your department workspace.' : 'Your government administration access is active.'}</p></div><div className="welcome-symbol" aria-hidden="true">{role === 'APPLICANT' ? '↗' : role === 'OFFICER' ? '▤' : '⌘'}</div></section>
-            <div className="section-title"><div><span className="card-kicker">AT A GLANCE</span><h2>Your workspace</h2></div><span className="secure-label"><i /> SECURE SESSION</span></div>
-            <section className="workspace-cards">
-              <article className="workspace-card"><span className="workspace-card-icon green">{role === 'APPLICANT' ? '◎' : role === 'OFFICER' ? '▤' : '⌘'}</span><span className="card-kicker">ACCESS LEVEL</span><h3>{roleLabels[role]}</h3><p>Your role determines which workspace areas you can access.</p><span className="card-foot">ROLE VERIFIED <b>✓</b></span></article>
-              <article className="workspace-card"><span className="workspace-card-icon sand">◷</span><span className="card-kicker">ACCOUNT</span><h3>{user.email}</h3><p>{role === 'OFFICER' ? `Department: ${String(data?.department ?? 'Not assigned')}` : role === 'ADMIN' ? `Registered users: ${String(data?.user_count ?? '—')}` : `Company: ${String(data?.company_id ? 'Linked to your profile' : 'Not added yet')}`}</p><span className="card-foot">ACCOUNT ACTIVE <b>✓</b></span></article>
-            </section>
-            {role === 'ADMIN' ? <AdminEscalationPanel/> : <section className="next-panel"><span className="next-icon">i</span><div><strong>Your secure workspace is ready</strong><p>Approval application and review features will appear here as they are added.</p></div><span className="phase-tag">FOUNDATION PHASE</span></section>}
-          </>
-        )}
-      </main>
-      <footer className="workspace-footer"><span>MAHACLEAR-AI <span>· Faster, Smarter Industrial Approvals</span></span><span>TEAM NORTH-STAR <i>·</i> SIH 2026</span></footer>
-    </div>
-  )
-}
-
-function AdminEscalationPanel() {
-  const [data, setData] = useState<{ total: number; items: Array<{ approval_id: number; application_number: string; company_name: string | null; department_name: string; message: string | null; escalated_at: string | null }> } | null>(null)
-  const [error, setError] = useState('')
-  useEffect(() => {
-    const token = localStorage.getItem('mahaclear_access_token')
-    void fetch('/api/admin/escalations', { headers: { Authorization: `Bearer ${token}` } }).then(async (response) => {
-      const body = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(body.detail || 'Unable to load escalations.')
-      setData(body)
-    }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load escalations.'))
-  }, [])
-  return <section className="admin-escalation-panel"><div className="applications-panel-heading"><div><span className="card-kicker">SERVICE LEVEL OVERSIGHT</span><h2>Escalated approvals · {data?.total ?? 0}</h2></div></div>{error && <div className="applicant-error">{error}</div>}{data?.items.length ? data.items.map((item) => <article className="admin-escalation-row" key={item.approval_id}><span className="activity-status escalated">ESCALATED</span><div><strong>{item.application_number} · {item.department_name}</strong><small>{item.company_name || 'Company not provided'} · {item.message}</small></div></article>) : data && <p className="history-empty">No approval SLAs are escalated.</p>}</section>
-}
-
 export default function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/'
   if (path === '/register') return <RegisterPage />
   if (path === '/login' || path === '/') return <LoginPage />
   if (path === '/notifications') return <NotificationCenterPage />
   if (path === '/applicant') return <ApplicantDashboard />
+  if (path === '/applicant/fees') return <ApplicantFeesPage />
   if (path === '/applicant/applications/new') return <StartApplication />
   const prevalidationRoute = path.match(/^\/applicant\/applications\/(\d+)\/prevalidation$/)
   if (prevalidationRoute) return <PrevalidationPage applicationId={Number(prevalidationRoute[1])} />
@@ -245,6 +165,8 @@ export default function App() {
   if (approvalsRoute) return <ApprovalStatusPage applicationId={Number(approvalsRoute[1])} />
   const criticalPathRoute = path.match(/^\/applicant\/applications\/(\d+)\/critical-path$/)
   if (criticalPathRoute) return <CriticalPathPage applicationId={Number(criticalPathRoute[1])} />
+  const assistantRoute = path.match(/^\/applicant\/applications\/(\d+)\/assistant$/)
+  if (assistantRoute) return <MahaClearAssistantPage applicationId={Number(assistantRoute[1])} />
   const activityRoute = path.match(/^\/applicant\/applications\/(\d+)\/activity$/)
   if (activityRoute) return <ApplicationActivityPage applicationId={Number(activityRoute[1])} />
   const applicationRoute = path.match(/^\/applicant\/applications\/(\d+)\/(edit|view)$/)
@@ -257,6 +179,9 @@ export default function App() {
     '/officer/escalations': 'escalations', '/officer/reports': 'reports', '/officer/profile': 'profile',
   }
   if (officerRoutes[path]) return <OfficerPortal view={officerRoutes[path]} />
-  if (path === '/admin') return <DashboardPage expectedRole="ADMIN" />
+  const adminApplicationRoute = path.match(/^\/admin\/applications\/(\d+)$/)
+  if (adminApplicationRoute) return <AdminApplicationPage applicationId={Number(adminApplicationRoute[1])} />
+  if (path === '/admin/audit') return <AdminAuditPage />
+  if (path === '/admin') return <AdminDashboardPage />
   return <LoginPage />
 }
