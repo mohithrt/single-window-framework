@@ -108,6 +108,8 @@ export function StartApplication() {
 
 export default function ApplicationWizard({ applicationId, readOnly }: Props) {
   const [application, setApplication] = useState<ApplicationRecord | null>(null)
+  const [correctionApprovalId, setCorrectionApprovalId] = useState<number | null>(null)
+  const [correctionReady, setCorrectionReady] = useState(false)
   const [values, setValues] = useState<ApplicationFormValues>(blankApplication)
   const [step, setStep] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -141,15 +143,27 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
         if (!response.ok) throw new Error(await errorMessage(response))
         const record: ApplicationRecord = await response.json()
         setApplication(record)
+        let openCorrectionId: number | null = null
+        if (!readOnly && record.status !== 'DRAFT') {
+          const workflowResponse = await fetch(`/api/applications/${applicationId}/approvals`, { headers })
+          if (workflowResponse.ok) {
+            const workflow = await workflowResponse.json()
+            const correction = workflow.approvals?.find((item: { status: string }) => item.status === 'DOCUMENT_CORRECTION')
+            openCorrectionId = correction?.id ?? null
+            setCorrectionReady(Boolean(correction?.correction_can_submit))
+          }
+        }
+        setCorrectionApprovalId(openCorrectionId)
         const form = applicationToForm(record)
         setValues(form)
         valuesRef.current = form
         savedSnapshot.current = JSON.stringify(formToDraft(form))
         setUploaded(record.documents ?? [])
-        if (readOnly || record.status !== 'DRAFT') setStep(6)
+        if (readOnly || (record.status !== 'DRAFT' && openCorrectionId === null)) setStep(6)
         else {
           const requestedStep = Number(new URLSearchParams(window.location.search).get('step'))
           if (Number.isInteger(requestedStep) && requestedStep >= 0 && requestedStep <= 7) setStep(requestedStep)
+          else if (openCorrectionId !== null) setStep(0)
         }
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : 'Unable to load this application.')
@@ -159,7 +173,8 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     })()
   }, [applicationId, readOnly])
 
-  const isReadOnly = readOnly || application?.status !== 'DRAFT'
+  const isCorrectionMode = correctionApprovalId !== null && !readOnly
+  const isReadOnly = readOnly || (application?.status !== 'DRAFT' && !isCorrectionMode)
 
   async function sendDraft(snapshot: ApplicationFormValues): Promise<ApplicationRecord> {
     const token = localStorage.getItem('mahaclear_access_token')
@@ -172,6 +187,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     const record: ApplicationRecord = await response.json()
     setApplication(record)
     savedSnapshot.current = JSON.stringify(formToDraft(snapshot))
+    if (correctionApprovalId !== null) setCorrectionReady(true)
     return record
   }
 
@@ -268,6 +284,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
           request.send(body)
         })
         setUploaded((current) => [...current, document])
+        if (correctionApprovalId !== null) setCorrectionReady(true)
         setSaveState('Document uploaded')
       }
       await refreshApplication(token)
@@ -327,6 +344,23 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     }
   }
 
+  async function submitCorrection() {
+    if (correctionApprovalId === null) return
+    setBusy(true)
+    setError('')
+    try {
+      if (!(await saveNow(values))) throw new Error('Your correction could not be saved. Please try again.')
+      const token = localStorage.getItem('mahaclear_access_token')
+      const response = await fetch(`/api/approvals/${correctionApprovalId}/correction-submitted`, {
+        method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!response.ok) throw new Error(await errorMessage(response))
+      window.location.assign(`/applicant/applications/${applicationId}/approvals`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not submit the correction.')
+    } finally { setBusy(false) }
+  }
+
   if (loading) return <main className="wizard-message"><span className="eyebrow"><i /> APPLICATION</span><h1>Loading application…</h1></main>
   if (error && !application) return <main className="wizard-message"><span className="eyebrow"><i /> APPLICATION</span><h1>We couldn’t open this application.</h1><p>{error}</p><a href="/applicant">Return to dashboard</a></main>
   if (!application) return null
@@ -334,15 +368,15 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
 
   return (
     <div className="wizard-shell">
-      <header className="wizard-topbar"><a className="brand" href="/applicant"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a><div className="wizard-top-meta"><span>{submitted ? 'SUBMITTED APPLICATION' : 'APPLICATION DRAFT'}</span><strong>{application.application_number}</strong></div><a className="wizard-exit" href="/applicant">Exit to dashboard <span>↗</span></a></header>
+      <header className="wizard-topbar"><a className="brand" href="/applicant"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a><div className="wizard-top-meta"><span>{isCorrectionMode ? 'CORRECTION RESPONSE' : submitted ? 'SUBMITTED APPLICATION' : 'APPLICATION DRAFT'}</span><strong>{application.application_number}</strong></div><a className="wizard-exit" href="/applicant">Exit to dashboard <span>↗</span></a></header>
       <main className="wizard-main">
-        {submitted && <div className="submitted-banner"><span>✓</span><div><strong>Application submitted</strong><p>Your application is saved. You can track updates from your dashboard.</p></div><a href="/applicant">View dashboard →</a></div>}
-        <div className="wizard-heading"><div><span className="eyebrow"><i /> {submitted ? 'APPLICATION DETAILS' : 'NEW INDUSTRIAL APPROVAL'}</span><h1>{submitted ? 'Application details' : 'Start your application'}</h1><p>Complete each section. Your draft saves automatically as you go.</p></div><div className="wizard-saved"><span className={`save-dot ${saveState.includes('fail') || saveState.includes('could not') ? 'save-error' : ''}`} />{isReadOnly ? submitted ? 'Submitted' : 'Read only' : saveState || 'Draft ready'}</div></div>
+        {isCorrectionMode ? <div className="submitted-banner correction-banner"><span>!</span><div><strong>Department correction requested</strong><p>Update the requested details or supporting files, then submit your correction for review.</p></div><a href={`/applicant/applications/${applicationId}/approvals`}>View request →</a></div> : submitted && <div className="submitted-banner"><span>✓</span><div><strong>Application submitted</strong><p>Your application is saved. You can track updates from your dashboard.</p></div><a href="/applicant">View dashboard →</a></div>}
+        <div className="wizard-heading"><div><span className="eyebrow"><i /> {isCorrectionMode ? 'DEPARTMENT CORRECTION' : submitted ? 'APPLICATION DETAILS' : 'NEW INDUSTRIAL APPROVAL'}</span><h1>{isCorrectionMode ? 'Respond to correction' : submitted ? 'Application details' : 'Start your application'}</h1><p>{isCorrectionMode ? 'Update the requested information or replace a supporting document. Changes save automatically.' : 'Complete each section. Your draft saves automatically as you go.'}</p></div><div className="wizard-saved"><span className={`save-dot ${saveState.includes('fail') || saveState.includes('could not') ? 'save-error' : ''}`} />{isReadOnly ? submitted ? 'Submitted' : 'Read only' : saveState || 'Draft ready'}</div></div>
         <div className="wizard-progress"><div><span>STEP {step + 1} OF 8</span><strong>{APPLICATION_STEPS[step]}</strong></div><div className="wizard-progress-track"><i style={{ width: `${Math.max(application.progress_percent, ((step + 1) / 8) * 100)}%` }} /></div><span>{application.progress_percent}% COMPLETE</span></div>
         <nav className="wizard-step-nav" aria-label="Application steps">{APPLICATION_STEPS.map((label, index) => <button key={label} className={`${index === step ? 'active' : ''} ${index < step ? 'complete' : ''}`} onClick={() => { if (index < step) void goToStep(index) }} disabled={index >= step}><span>{index < step ? '✓' : String(index + 1).padStart(2, '0')}</span><small>{label}</small></button>)}</nav>
 
         <form className="wizard-card" onSubmit={(event: FormEvent<HTMLFormElement>) => event.preventDefault()}>
-          <div className="wizard-card-heading"><div><span className="card-kicker">STEP {String(step + 1).padStart(2, '0')} / 08</span><h2>{APPLICATION_STEPS[step]}</h2><p>{stepDescription(step)}</p></div><span className="wizard-lock">{isReadOnly ? 'VIEW ONLY' : 'SECURE DRAFT'}</span></div>
+          <div className="wizard-card-heading"><div><span className="card-kicker">STEP {String(step + 1).padStart(2, '0')} / 08</span><h2>{APPLICATION_STEPS[step]}</h2><p>{stepDescription(step)}</p></div><span className="wizard-lock">{isReadOnly ? 'VIEW ONLY' : isCorrectionMode ? 'CORRECTION RESPONSE' : 'SECURE DRAFT'}</span></div>
           {error && <div className="wizard-error" role="alert">{error}</div>}
           <div className="wizard-fields">
             {step === 0 && <>
@@ -393,11 +427,11 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
               {!isReadOnly && <button className="secondary-button" type="button" onClick={() => void openPrevalidation()} disabled={busy}>Run document pre-validation →</button>}
             </>}
             {step === 6 && <><Review values={values} application={application} documents={uploaded} /><a className="risk-review-link" href={`/applicant/applications/${applicationId}/risk`}>Open transparent risk assessment <span>→</span></a></>}
-            {step === 7 && <div className="final-submit-panel"><span className="submit-seal">✓</span><span className="card-kicker">FINAL STEP</span><h3>{submitted ? 'Your application has been submitted.' : 'Ready to submit?'}</h3><p>{submitted ? 'The application is locked for editing and appears in your applicant dashboard.' : 'Submitting locks this application draft. It will appear in your dashboard as pending. You can track its status there.'}</p><div className="submit-summary"><span>APPLICATION ID</span><strong>{application.application_number}</strong><span>RISK ASSESSMENT</span><strong>{application.risk_tier || 'Not calculated'}</strong></div><a className="risk-review-link" href={`/applicant/applications/${applicationId}/risk`}>View risk assessment and factors <span>→</span></a></div>}
+            {step === 7 && <div className="final-submit-panel"><span className="submit-seal">{isCorrectionMode ? '↻' : '✓'}</span><span className="card-kicker">FINAL STEP</span><h3>{isCorrectionMode ? 'Ready to submit your correction?' : submitted ? 'Your application has been submitted.' : 'Ready to submit?'}</h3><p>{isCorrectionMode ? correctionReady ? 'Your updated information will return to the requesting department for review.' : 'Update an application detail or upload/replace a document before submitting the response.' : submitted ? 'The application is locked for editing and appears in your applicant dashboard.' : 'Submitting locks this application draft. It will appear in your dashboard as pending. You can track its status there.'}</p><div className="submit-summary"><span>APPLICATION ID</span><strong>{application.application_number}</strong><span>RISK ASSESSMENT</span><strong>{application.risk_tier || 'Not calculated'}</strong></div><a className="risk-review-link" href={`/applicant/applications/${applicationId}/risk`}>View risk assessment and factors <span>→</span></a></div>}
           </div>
           <div className="wizard-actions">
             <div className="wizard-action-left">{step > 0 && <button className="secondary-button" type="button" onClick={() => void goToStep(step - 1)}>← Back</button>}</div>
-            <div className="wizard-action-right">{!isReadOnly && <button className="text-button" type="button" onClick={() => void saveAndExit()} disabled={busy}>Save draft &amp; exit</button>}{step < 7 ? <button className="primary-button" type="button" onClick={() => void goToStep(step + 1)} disabled={busy}>{isReadOnly ? 'Continue' : step === 6 ? 'Review submission' : 'Save & continue'} <span>→</span></button> : !submitted ? <button className="primary-button submit-button" type="button" onClick={() => void submitApplication()} disabled={busy}>{busy ? 'Submitting…' : 'Submit application'} <span>→</span></button> : <a className="primary-button button-link" href="/applicant">Back to dashboard <span>→</span></a>}</div>
+            <div className="wizard-action-right">{!isReadOnly && <button className="text-button" type="button" onClick={() => void saveAndExit()} disabled={busy}>{isCorrectionMode ? 'Save & return' : 'Save draft & exit'}</button>}{step < 7 ? <button className="primary-button" type="button" onClick={() => void goToStep(step + 1)} disabled={busy}>{isReadOnly ? 'Continue' : step === 6 ? 'Review submission' : 'Save & continue'} <span>→</span></button> : isCorrectionMode ? <button className="primary-button submit-button" type="button" onClick={() => void submitCorrection()} disabled={busy || !correctionReady}>{busy ? 'Submitting…' : 'Submit correction'} <span>→</span></button> : !submitted ? <button className="primary-button submit-button" type="button" onClick={() => void submitApplication()} disabled={busy}>{busy ? 'Submitting…' : 'Submit application'} <span>→</span></button> : <a className="primary-button button-link" href="/applicant">Back to dashboard <span>→</span></a>}</div>
           </div>
         </form>
         <div className="wizard-footnote"><span>YOUR DRAFT IS PRIVATE</span><span>Progress saves automatically · No workflow or risk calculation is performed</span></div>

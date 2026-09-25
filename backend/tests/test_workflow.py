@@ -123,6 +123,8 @@ def test_workflow_initialization_lifecycle_and_audit(client) -> None:
     assert client.post(f"/api/approvals/{mpcb_id}/start-review", headers=officer_headers).status_code == 200
     assert client.post(f"/api/approvals/{mpcb_id}/request-correction", headers=officer_headers,
                        json={"message": "Upload the signed pollution control plan."}).status_code == 200
+    assert client.patch(f"/api/applications/{application_id}", headers=applicant_headers,
+                        json={"project_description": "Updated to address the pollution control plan clarification."}).status_code == 200
     correction = client.post(f"/api/approvals/{mpcb_id}/correction-submitted", headers=applicant_headers)
     assert correction.status_code == 200
     assert client.post(f"/api/approvals/{mpcb_id}/start-review", headers=officer_headers).status_code == 200
