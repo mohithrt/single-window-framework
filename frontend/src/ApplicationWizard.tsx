@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import {
@@ -91,7 +92,7 @@ export function StartApplication() {
     started.current = true
     const token = localStorage.getItem('mahaclear_access_token')
     if (!token) { window.location.assign('/login'); return }
-    void fetch('/api/applications', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+    void fetch(apiUrl('/api/applications'), { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
       .then(async (response) => {
         if (!response.ok) throw new Error(await errorMessage(response))
         const application: ApplicationRecord = await response.json()
@@ -132,20 +133,20 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     const headers = { Authorization: `Bearer ${token}` }
     void (async () => {
       try {
-        const me = await fetch('/api/auth/me', { headers })
+        const me = await fetch(apiUrl('/api/auth/me'), { headers })
         if (!me.ok) throw new Error('Your session has expired. Sign in again.')
         const account: { role: string } = await me.json()
         if (account.role !== 'APPLICANT') {
           window.location.assign(account.role === 'OFFICER' ? '/officer' : '/admin')
           return
         }
-        const response = await fetch(`/api/applications/${applicationId}`, { headers })
+        const response = await fetch(apiUrl(`/api/applications/${applicationId}`), { headers })
         if (!response.ok) throw new Error(await errorMessage(response))
         const record: ApplicationRecord = await response.json()
         setApplication(record)
         let openCorrectionId: number | null = null
         if (!readOnly && record.status !== 'DRAFT') {
-          const workflowResponse = await fetch(`/api/applications/${applicationId}/approvals`, { headers })
+          const workflowResponse = await fetch(apiUrl(`/api/applications/${applicationId}/approvals`), { headers })
           if (workflowResponse.ok) {
             const workflow = await workflowResponse.json()
             const correction = workflow.approvals?.find((item: { status: string }) => item.status === 'DOCUMENT_CORRECTION')
@@ -178,7 +179,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
 
   async function sendDraft(snapshot: ApplicationFormValues): Promise<ApplicationRecord> {
     const token = localStorage.getItem('mahaclear_access_token')
-    const response = await fetch(`/api/applications/${applicationId}`, {
+    const response = await fetch(apiUrl(`/api/applications/${applicationId}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(formToDraft(snapshot)),
@@ -198,7 +199,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
   }
 
   async function refreshApplication(token: string | null) {
-    const response = await fetch(`/api/applications/${applicationId}`, {
+    const response = await fetch(apiUrl(`/api/applications/${applicationId}`), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
     if (response.ok) setApplication(await response.json())
@@ -271,7 +272,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
         body.append('file', file)
         const document: ApplicationDocument = await new Promise((resolve, reject) => {
           const request = new XMLHttpRequest()
-          request.open('POST', `/api/applications/${applicationId}/documents`)
+          request.open('POST', apiUrl(`/api/applications/${applicationId}/documents`))
           if (token) request.setRequestHeader('Authorization', `Bearer ${token}`)
           request.upload.onprogress = (progress) => {
             if (progress.lengthComputable) setUploadPercent(Math.round(progress.loaded * 100 / progress.total))
@@ -298,7 +299,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
 
   async function removeDocument(documentId: number) {
     const token = localStorage.getItem('mahaclear_access_token')
-    const response = await fetch(`/api/applications/${applicationId}/documents/${documentId}`, {
+    const response = await fetch(apiUrl(`/api/applications/${applicationId}/documents/${documentId}`), {
       method: 'DELETE',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
@@ -329,7 +330,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     try {
       if (!(await saveNow(values))) throw new Error('Your draft could not be saved. Please try again.')
       const token = localStorage.getItem('mahaclear_access_token')
-      const response = await fetch(`/api/applications/${applicationId}/submit`, {
+      const response = await fetch(apiUrl(`/api/applications/${applicationId}/submit`), {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -351,7 +352,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     try {
       if (!(await saveNow(values))) throw new Error('Your correction could not be saved. Please try again.')
       const token = localStorage.getItem('mahaclear_access_token')
-      const response = await fetch(`/api/approvals/${correctionApprovalId}/correction-submitted`, {
+      const response = await fetch(apiUrl(`/api/approvals/${correctionApprovalId}/correction-submitted`), {
         method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
       if (!response.ok) throw new Error(await errorMessage(response))
@@ -423,7 +424,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
               {!isReadOnly && <div className="upload-row"><Field label="Document type"><select value={documentType} onChange={(event) => setDocumentType(event.target.value)}>{DOCUMENT_TYPES.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></Field><label className={`upload-button ${busy ? 'disabled' : ''}`}>Choose files<input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple disabled={busy} onChange={(event) => void uploadFiles(event)} /></label></div>}
               {uploadPercent !== null && <div className="upload-progress-panel"><div><strong>Uploading document</strong><span>{uploadPercent}%</span></div><progress max="100" value={uploadPercent} /></div>}
               {fieldErrors.documents && <p className="field-error">{fieldErrors.documents}</p>}
-              {uploaded.length === 0 ? <div className="no-documents">No documents uploaded yet.</div> : <ul className="document-list">{uploaded.map((document) => <li key={document.id}><span className="file-mark">FILE</span><span className="document-name"><strong>{document.file_name}</strong><small>{documentLabel(document.document_type)} · {formatBytes(document.size_bytes)} · {document.status}</small></span><a href={`/api/applications/${applicationId}/documents/${document.id}/download`} onClick={(event) => { event.preventDefault(); void downloadDocument(applicationId, document.id) }}>Download</a>{!isReadOnly && <button type="button" aria-label={`Remove ${document.file_name}`} onClick={() => void removeDocument(document.id)}>Remove</button>}</li>)}</ul>}
+              {uploaded.length === 0 ? <div className="no-documents">No documents uploaded yet.</div> : <ul className="document-list">{uploaded.map((document) => <li key={document.id}><span className="file-mark">FILE</span><span className="document-name"><strong>{document.file_name}</strong><small>{documentLabel(document.document_type)} · {formatBytes(document.size_bytes)} · {document.status}</small></span><a href={apiUrl(`/api/applications/${applicationId}/documents/${document.id}/download`)} onClick={(event) => { event.preventDefault(); void downloadDocument(applicationId, document.id) }}>Download</a>{!isReadOnly && <button type="button" aria-label={`Remove ${document.file_name}`} onClick={() => void removeDocument(document.id)}>Remove</button>}</li>)}</ul>}
               {!isReadOnly && <button className="secondary-button" type="button" onClick={() => void openPrevalidation()} disabled={busy}>Run document pre-validation →</button>}
             </>}
             {step === 6 && <><Review values={values} application={application} documents={uploaded} /><a className="risk-review-link" href={`/applicant/applications/${applicationId}/risk`}>Open transparent risk assessment <span>→</span></a></>}
@@ -483,7 +484,7 @@ function withUnit(value: string, unit: string): string { return value ? `${Numbe
 
 async function downloadDocument(applicationId: number, documentId: number) {
   const token = localStorage.getItem('mahaclear_access_token')
-  const response = await fetch(`/api/applications/${applicationId}/documents/${documentId}/download`, {
+  const response = await fetch(apiUrl(`/api/applications/${applicationId}/documents/${documentId}/download`), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!response.ok) return

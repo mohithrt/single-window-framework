@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 
@@ -42,20 +43,20 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     const token = localStorage.getItem('mahaclear_access_token')
     if (!token) { window.location.assign('/login'); return }
-    void fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } }).then((response) => response.json()).then((user) => {
+    void fetch(apiUrl('/api/auth/me'), { headers: { Authorization: `Bearer ${token}` } }).then((response) => response.json()).then((user) => {
       if (user.role !== 'ADMIN') window.location.assign(user.role === 'OFFICER' ? '/officer' : '/applicant')
     }).catch(() => window.location.assign('/login'))
     void Promise.all([
-      api<AdminData>('/api/admin/analytics'),
-      api<{ items: Provider[] }>('/api/admin/integrations/providers'),
-      api<{ items: Integration[] }>('/api/admin/integrations'),
+      api<AdminData>(apiUrl('/api/admin/analytics')),
+      api<{ items: Provider[] }>(apiUrl('/api/admin/integrations/providers')),
+      api<{ items: Integration[] }>(apiUrl('/api/admin/integrations')),
     ]).then(([report, catalog, history]) => { setData(report); setProviders(catalog.items); setIntegrations(history.items) })
       .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load administration data.'))
   }, [])
   async function submitIntegration(event: FormEvent) {
     event.preventDefault(); setError(''); setMessage(''); setBusy(true)
     try {
-      const result = await api<Integration>(`/api/admin/integrations/${provider}/submit`, {
+      const result = await api<Integration>(apiUrl(`/api/admin/integrations/${provider}/submit`), {
         method: 'POST', body: JSON.stringify({ application_id: applicationId ? Number(applicationId) : null }),
       })
       setIntegrations((rows) => [result, ...rows]); setMessage(`${result.provider_code} demo transaction saved as ${result.reference}. No external system was contacted.`)

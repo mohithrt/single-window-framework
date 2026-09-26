@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 import type { ApplicationsResponse } from './applicationTypes'
 import { formatDate, statusLabel } from './applicationTypes'
@@ -35,7 +36,7 @@ export default function ApplicantDashboard() {
     const headers = { Authorization: `Bearer ${token}` }
     async function load() {
       try {
-        const me = await fetch('/api/auth/me', { headers })
+        const me = await fetch(apiUrl('/api/auth/me'), { headers })
         if (!me.ok) throw new Error('Your session has expired. Sign in again.')
         const user: ApplicantUser = await me.json()
         if (user.role !== 'APPLICANT') {
@@ -44,8 +45,8 @@ export default function ApplicantDashboard() {
           return
         }
         const [response, dashboardResponse] = await Promise.all([
-          fetch('/api/applications', { headers }),
-          fetch('/api/applicant/dashboard', { headers }),
+          fetch(apiUrl('/api/applications'), { headers }),
+          fetch(apiUrl('/api/applicant/dashboard'), { headers }),
         ])
         if (!response.ok) throw new Error(await responseMessage(response))
         if (!dashboardResponse.ok) throw new Error(await responseMessage(dashboardResponse))
@@ -66,7 +67,7 @@ export default function ApplicantDashboard() {
     setCreating(true)
     try {
       const token = localStorage.getItem('mahaclear_access_token')
-      const response = await fetch('/api/applications', {
+      const response = await fetch(apiUrl('/api/applications'), {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })

@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 
 type WorkflowStatus = 'NOT_STARTED' | 'PENDING' | 'IN_REVIEW' | 'DOCUMENT_CORRECTION' | 'INSPECTION_REQUIRED' | 'APPROVED' | 'REJECTED' | 'ESCALATED'
@@ -17,7 +18,7 @@ export default function ApprovalStatusPage({ applicationId }: { applicationId: n
   useEffect(() => {
     const token = localStorage.getItem('mahaclear_access_token')
     if (!token) { window.location.assign('/login'); return }
-    void fetch(`/api/applications/${applicationId}/approvals`, { headers: { Authorization: `Bearer ${token}` } })
+    void fetch(apiUrl(`/api/applications/${applicationId}/approvals`), { headers: { Authorization: `Bearer ${token}` } })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}))
         if (!response.ok) throw new Error(body.detail || 'Unable to load approval statuses.')

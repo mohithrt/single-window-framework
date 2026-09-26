@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 
 type Fee = {
@@ -29,7 +30,7 @@ export default function ApplicantFeesPage() {
   useEffect(() => {
     const token = localStorage.getItem('mahaclear_access_token')
     if (!token) { window.location.assign('/login'); return }
-    void fetch('/api/fees', { headers: { Authorization: 'Bearer ' + token } })
+    void fetch(apiUrl('/api/fees'), { headers: { Authorization: 'Bearer ' + token } })
       .then(async response => {
         const body = await response.json().catch(() => ({}))
         if (!response.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'Unable to load fee records.')

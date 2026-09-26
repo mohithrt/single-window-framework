@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 
@@ -25,12 +26,12 @@ export default function MahaClearAssistantPage({ applicationId }: { applicationI
 
   useEffect(() => {
     void Promise.all([
-      api<{ application_number: string; company_name: string | null }>(`/api/applications/${applicationId}`),
-      api<{ items: Session[] }>(`/api/applications/${applicationId}/assistant/sessions`),
+      api<{ application_number: string; company_name: string | null }>(apiUrl(`/api/applications/${applicationId}`)),
+      api<{ items: Session[] }>(apiUrl(`/api/applications/${applicationId}/assistant/sessions`)),
     ]).then(async ([app, saved]) => {
       setApplication(app); setSessions(saved.items)
       if (saved.items[0]) {
-        const history = await api<{ messages: Message[] }>(`/api/applications/${applicationId}/assistant/sessions/${saved.items[0].id}`)
+        const history = await api<{ messages: Message[] }>(apiUrl(`/api/applications/${applicationId}/assistant/sessions/${saved.items[0].id}`))
         setSessionId(saved.items[0].id); setMessages(history.messages)
       }
     }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load the assistant.'))
@@ -44,12 +45,12 @@ export default function MahaClearAssistantPage({ applicationId }: { applicationI
     const userMessage: Message = { id: Date.now(), role: 'USER', content: text }
     setMessages((items) => [...items, userMessage]); setQuestion('')
     try {
-      const result = await api<{ session_id: number; mode: string; message: Message }>(`/api/applications/${applicationId}/assistant/chat`, {
+      const result = await api<{ session_id: number; mode: string; message: Message }>(apiUrl(`/api/applications/${applicationId}/assistant/chat`), {
         method: 'POST', body: JSON.stringify({ message: text, session_id: sessionId }),
       })
       setAssistantMode(result.mode === 'LLM_ASSISTED' ? 'OPTIONAL LLM · RULE-GROUNDED' : 'DEMO AI · RULE-BASED')
       setSessionId(result.session_id); setMessages((items) => [...items, result.message])
-      const saved = await api<{ items: Session[] }>(`/api/applications/${applicationId}/assistant/sessions`)
+      const saved = await api<{ items: Session[] }>(apiUrl(`/api/applications/${applicationId}/assistant/sessions`))
       setSessions(saved.items)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to send your question.')
@@ -60,7 +61,7 @@ export default function MahaClearAssistantPage({ applicationId }: { applicationI
 
   async function openSession(id: number) {
     try {
-      const result = await api<{ messages: Message[] }>(`/api/applications/${applicationId}/assistant/sessions/${id}`)
+      const result = await api<{ messages: Message[] }>(apiUrl(`/api/applications/${applicationId}/assistant/sessions/${id}`))
       setSessionId(id); setMessages(result.messages); setError('')
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Unable to load this conversation.') }
   }

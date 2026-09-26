@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useCallback, useEffect, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import AuthenticatedDownload from './AuthenticatedDownload'
@@ -47,7 +48,7 @@ export default function OfficerPortal({ view, approvalId }: { view: View; approv
   const [officer, setOfficer] = useState<Officer | null>(null)
   const [authError, setAuthError] = useState('')
   useEffect(() => {
-    void api<Officer>('/api/auth/me').then((current) => {
+    void api<Officer>(apiUrl('/api/auth/me')).then((current) => {
       if (current.role !== 'OFFICER') { window.location.assign(current.role === 'ADMIN' ? '/admin' : '/applicant'); return }
       setOfficer(current)
     }).catch((error: unknown) => setAuthError(error instanceof Error ? error.message : 'Unable to verify officer access.'))
@@ -83,7 +84,7 @@ function OfficerDashboard({ officer }: { officer: Officer }) {
   const [data, setData] = useState<Record<string, number | string> | null>(null)
   const [recent, setRecent] = useState<QueueResponse | null>(null)
   const [error, setError] = useState('')
-  useEffect(() => { void Promise.all([api<Record<string, number | string>>('/api/officer/dashboard'), api<QueueResponse>('/api/officer/queue?limit=6&sort_by=SLA&sort_order=ASC')]).then(([summary, queue]) => { setData(summary); setRecent(queue) }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load the officer dashboard.')) }, [])
+  useEffect(() => { void Promise.all([api<Record<string, number | string>>(apiUrl('/api/officer/dashboard')), api<QueueResponse>(apiUrl('/api/officer/queue?limit=6&sort_by=SLA&sort_order=ASC'))]).then(([summary, queue]) => { setData(summary); setRecent(queue) }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load the officer dashboard.')) }, [])
   const metrics = [
     ['PENDING APPLICATIONS', data?.pending_applications ?? 0, 'blue'], ['IN REVIEW', data?.in_review ?? 0, 'green'],
     ['HIGH RISK', data?.high_risk ?? 0, 'red'], ['SLA WARNING', data?.sla_warning ?? 0, 'amber'],
@@ -114,7 +115,7 @@ function QueuePage({ escalations = false }: { escalations?: boolean }) {
     if (risk !== 'ALL') params.set('risk', risk)
     if (status !== 'ALL') params.set('status', status)
     if (sla !== 'ALL') params.set('sla', sla)
-    void api<QueueResponse>(`/api/officer/queue?${params}`).then((result) => { setItems(result.items); setTotal(result.total); setError('') }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load the application queue.'))
+    void api<QueueResponse>(apiUrl(`/api/officer/queue?${params}`)).then((result) => { setItems(result.items); setTotal(result.total); setError('') }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load the application queue.'))
   }, [direction, risk, search, sla, sort, status])
   useEffect(() => { refresh() }, [refresh])
   return <>
@@ -152,8 +153,8 @@ function ReviewPage({ approvalId }: { approvalId: number }) {
   const [inspectionInstructions, setInspectionInstructions] = useState('')
   const [notice, setNotice] = useState('')
   const refresh = useCallback(async () => {
-    const detail = await api<ApprovalDetail>(`/api/officer/approvals/${approvalId}`)
-    const joints = await api<{ items: Inspection[] }>('/api/officer/inspections?inspection_type=JOINT')
+    const detail = await api<ApprovalDetail>(apiUrl(`/api/officer/approvals/${approvalId}`))
+    const joints = await api<{ items: Inspection[] }>(apiUrl('/api/officer/inspections?inspection_type=JOINT'))
     detail.inspections = [...detail.inspections, ...joints.items.filter((item) => item.application_id === Number(detail.application.id)
       && item.approval_ids?.includes(detail.approval.id))]
     setData(detail)
@@ -165,7 +166,7 @@ function ReviewPage({ approvalId }: { approvalId: number }) {
     setBusy(true); setError(''); setNotice('')
     try {
       if (!path.endsWith('/start-review') && ['PENDING', 'INSPECTION_REQUIRED', 'ESCALATED'].includes(data.approval.status)) {
-        await api(`/api/approvals/${approvalId}/start-review`, { method: 'POST' })
+        await api(apiUrl(`/api/approvals/${approvalId}/start-review`), { method: 'POST' })
         await refresh()
       }
       const result = await api<{ status?: string }>(path, { method: 'POST', ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
@@ -174,13 +175,13 @@ function ReviewPage({ approvalId }: { approvalId: number }) {
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'The action could not be saved.') }
     finally { setBusy(false) }
   }
-  function remarkSubmit(event: FormEvent) { event.preventDefault(); if (!remark.trim()) return; void postAction(`/api/officer/approvals/${approvalId}/remarks`, { message: remark }).then(() => setRemark('')) }
-  function rejectSubmit(event: FormEvent) { event.preventDefault(); if (!reason.trim()) return; void postAction(`/api/approvals/${approvalId}/reject`, { reason }).then(() => setReason('')) }
-  function correctionSubmit(event: FormEvent) { event.preventDefault(); if (!correction.trim()) return; void postAction(`/api/approvals/${approvalId}/request-correction`, { message: correction }).then(() => setCorrection('')) }
+  function remarkSubmit(event: FormEvent) { event.preventDefault(); if (!remark.trim()) return; void postAction(apiUrl(`/api/officer/approvals/${approvalId}/remarks`), { message: remark }).then(() => setRemark('')) }
+  function rejectSubmit(event: FormEvent) { event.preventDefault(); if (!reason.trim()) return; void postAction(apiUrl(`/api/approvals/${approvalId}/reject`), { reason }).then(() => setReason('')) }
+  function correctionSubmit(event: FormEvent) { event.preventDefault(); if (!correction.trim()) return; void postAction(apiUrl(`/api/approvals/${approvalId}/request-correction`), { message: correction }).then(() => setCorrection('')) }
   function inspectionSubmit(event: FormEvent) {
     event.preventDefault()
     if (!inspectionDate || !inspectionLocation.trim()) return
-    void postAction(`/api/officer/approvals/${approvalId}/inspections`, {
+    void postAction(apiUrl(`/api/officer/approvals/${approvalId}/inspections`), {
       inspection_type: 'SINGLE', scheduled_at: new Date(inspectionDate).toISOString(),
       location: inspectionLocation, instructions: inspectionInstructions || null,
     }).then(() => { setInspectionDate(''); setInspectionLocation(''); setInspectionInstructions('') })
@@ -207,9 +208,9 @@ function ReviewPage({ approvalId }: { approvalId: number }) {
         <section className="officer-panel review-panel"><PanelHead eyebrow="REVIEW HISTORY" title="Audit history"/>{data.audit_history.length ? <ol className="officer-history">{[...data.audit_history].reverse().map((event) => <li key={event.id}><span className="history-dot"/><div><strong>{label(event.action)}</strong><p>{event.message || [event.from_status, event.to_status].filter(Boolean).map(label).join(' → ')}</p><small>{event.actor} · {dateLabel(event.created_at)}</small></div></li>)}</ol> : <Empty message="No review actions have been recorded."/>}</section>
       </div>
       <aside className="review-action-column">
-        <section className="officer-panel action-panel"><PanelHead eyebrow="DEPARTMENT DECISION" title={label(data.approval.status)}/>{canStartReview ? <button className="officer-button primary" disabled={busy} onClick={() => void postAction(`/api/approvals/${approvalId}/start-review`)}>Start review</button> : null}
+        <section className="officer-panel action-panel"><PanelHead eyebrow="DEPARTMENT DECISION" title={label(data.approval.status)}/>{canStartReview ? <button className="officer-button primary" disabled={busy} onClick={() => void postAction(apiUrl(`/api/approvals/${approvalId}/start-review`))}>Start review</button> : null}
           {editable ? <>
-            <button className="officer-button success" disabled={busy} onClick={() => void postAction(`/api/approvals/${approvalId}/approve`)}>Approve application</button>
+            <button className="officer-button success" disabled={busy} onClick={() => void postAction(apiUrl(`/api/approvals/${approvalId}/approve`))}>Approve application</button>
             <form className="officer-action-form" onSubmit={rejectSubmit}><label>Reject with reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={1} required placeholder="Explain the reason for rejection"/></label><button className="officer-button danger" disabled={busy || !reason.trim()}>Reject</button></form>
             <form className="officer-action-form" onSubmit={correctionSubmit}><label>Request correction<textarea value={correction} onChange={(event) => setCorrection(event.target.value)} minLength={1} required placeholder="Describe what the applicant needs to correct"/></label><button className="officer-button secondary" disabled={busy || !correction.trim()}>Request correction</button></form>
             <form className="officer-action-form" onSubmit={inspectionSubmit}><label>Schedule inspection<span className="action-hint">Department inspections can be scheduled here. Use Joint Inspections in the sidebar to coordinate multiple departments.</span></label><label>Date and time<input type="datetime-local" value={inspectionDate} onChange={(event) => setInspectionDate(event.target.value)} required/></label><label>Location<input value={inspectionLocation} onChange={(event) => setInspectionLocation(event.target.value)} required minLength={3} placeholder="Inspection site address"/></label><label>Instructions<textarea value={inspectionInstructions} onChange={(event) => setInspectionInstructions(event.target.value)} placeholder="Optional inspection notes"/></label><button className="officer-button secondary" disabled={busy || !inspectionDate || !inspectionLocation.trim()}>Schedule inspection</button></form>
@@ -228,7 +229,7 @@ function InspectionList({ type }: { type: 'SINGLE' | 'JOINT' }) {
   const [reload, setReload] = useState(0)
   const [selected, setSelected] = useState<number | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
-  useEffect(() => { void api<{ total: number; items: Inspection[] }>(`/api/officer/inspections?inspection_type=${type}`).then(setData).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load inspections.')) }, [type, reload])
+  useEffect(() => { void api<{ total: number; items: Inspection[] }>(apiUrl(`/api/officer/inspections?inspection_type=${type}`)).then(setData).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load inspections.')) }, [type, reload])
   return <><PageHeading title={type === 'JOINT' ? 'Joint inspections' : 'Inspections'} description="Schedule site visits, update findings, attach photos, and record recommendations."/>{error && <ErrorBox message={error}/ >}{errorMessage && <ErrorBox message={errorMessage}/ >}{type === 'JOINT' && <section className="officer-panel"><PanelHead eyebrow="COORDINATED SITE VISIT" title="Schedule a joint inspection"/><JointInspectionForm onError={setErrorMessage} onCreated={() => { setErrorMessage(''); setReload((value) => value + 1) }}/></section>}<section className="officer-panel"><PanelHead eyebrow="INSPECTION REGISTER" title={`${data?.total ?? 0} scheduled`}/>{data?.items.length ? <div className="officer-table-scroll"><table className="officer-table"><thead><tr><th>APPLICATION</th><th>DEPARTMENT</th><th>DATE & TIME</th><th>SITE</th><th>STATUS</th><th /></tr></thead><tbody>{data.items.map((item) => <tr key={item.id}><td><strong>{item.application_number}</strong></td><td>{item.department_name}<small>{item.participants?.map((p) => p.department_name).join(' · ') || label(item.inspection_type)}</small></td><td>{dateLabel(item.scheduled_at)}</td><td>{item.site || item.location}</td><td><StatusBadge value={item.status}/></td><td><button className="officer-review-link as-button" onClick={() => setSelected(item.id)}>Manage</button>{item.approval_id && <a className="officer-review-link" href={`/officer/approvals/${item.approval_id}`}> · Review →</a>}</td></tr>)}</tbody></table></div> : data && <Empty message="No inspections have been scheduled."/>}</section>{selected !== null && <InspectionEditor inspectionId={selected} kind={type} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); setReload((value) => value + 1) }}/>}</>
 }
 
@@ -245,9 +246,9 @@ function JointInspectionForm({ onCreated, onError }: { onCreated: () => void; on
   async function loadApprovals() {
     onError('')
     try {
-      const result = await api<{ approvals: Array<{ id: number; department_name: string; status: string; is_required: boolean }> }>(`/api/applications/${applicationId}/approvals`)
+      const result = await api<{ approvals: Array<{ id: number; department_name: string; status: string; is_required: boolean }> }>(apiUrl(`/api/applications/${applicationId}/approvals`))
       setApprovals(result.approvals.filter((item) => item.is_required && ['PENDING', 'IN_REVIEW', 'INSPECTION_REQUIRED', 'ESCALATED'].includes(item.status)))
-      const roster = await api<{ items: Array<{ id: number; name: string; department_name: string | null }> }>('/api/officer/inspection-officers')
+      const roster = await api<{ items: Array<{ id: number; name: string; department_name: string | null }> }>(apiUrl('/api/officer/inspection-officers'))
       setOfficers(roster.items)
       setSelected([])
     } catch (caught) { onError(caught instanceof Error ? caught.message : 'Could not load department approvals.') }
@@ -255,7 +256,7 @@ function JointInspectionForm({ onCreated, onError }: { onCreated: () => void; on
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); onError('')
     try {
-      await api('/api/officer/joint-inspections', { method: 'POST', body: JSON.stringify({ application_id: Number(applicationId), approval_ids: selected, scheduled_at: new Date(date).toISOString(), site, instructions: instructions || null, officer_assignments: assignments }) })
+      await api(apiUrl('/api/officer/joint-inspections'), { method: 'POST', body: JSON.stringify({ application_id: Number(applicationId), approval_ids: selected, scheduled_at: new Date(date).toISOString(), site, instructions: instructions || null, officer_assignments: assignments }) })
       setApplicationId(''); setApprovals([]); setOfficers([]); setSelected([]); setAssignments({}); setDate(''); setSite(''); setInstructions(''); onCreated()
     } catch (caught) { onError(caught instanceof Error ? caught.message : 'Could not schedule joint inspection.') }
     finally { setBusy(false) }
@@ -272,7 +273,7 @@ function InspectionEditor({ inspectionId, kind, onClose, onSaved }: { inspection
   const [checklist, setChecklist] = useState('[]')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const route = kind === 'JOINT' ? `/api/officer/joint-inspections/${inspectionId}` : `/api/officer/inspections/${inspectionId}`
+  const route = kind === 'JOINT' ? apiUrl(`/api/officer/joint-inspections/${inspectionId}`) : apiUrl(`/api/officer/inspections/${inspectionId}`)
   useEffect(() => { void api<Inspection>(route).then((record) => { setData(record); setStatus(record.status); setFindings(record.findings || ''); setRemarks(record.remarks || ''); setRecommendation(record.recommendation || ''); setChecklist(JSON.stringify(record.checklist || [], null, 2)) }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load inspection.')) }, [route])
   async function save(event: FormEvent) {
     event.preventDefault(); setError(''); setBusy(true)
@@ -288,33 +289,33 @@ function InspectionEditor({ inspectionId, kind, onClose, onSaved }: { inspection
     if (!event.target.files?.length) return
     const token = localStorage.getItem('mahaclear_access_token')
     const form = new FormData(); Array.from(event.target.files).forEach((file) => form.append('files', file))
-    const photoRoute = kind === 'JOINT' ? `/api/officer/joint-inspections/${inspectionId}/photos` : `/api/officer/inspections/${inspectionId}/photos`
+    const photoRoute = kind === 'JOINT' ? apiUrl(`/api/officer/joint-inspections/${inspectionId}/photos`) : apiUrl(`/api/officer/inspections/${inspectionId}/photos`)
     setBusy(true); setError('')
     try { const response = await fetch(photoRoute, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.detail || 'Photo upload failed.'); const record = await api<Inspection>(route); setData(record) }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Photo upload failed.') }
     finally { setBusy(false); event.target.value = '' }
   }
-  return <section className="officer-panel inspection-editor"><PanelHead eyebrow={kind === 'JOINT' ? 'JOINT INSPECTION' : 'DEPARTMENT INSPECTION'} title={data ? `${data.application_number} · ${data.site || data.location}` : 'Inspection details'} action={<button className="officer-button secondary" onClick={onClose}>Close</button>}/>{error && <ErrorBox message={error}/ >}{data && <><div className="inspection-participants">{data.participants?.map((person) => <span key={person.approval_id}>{person.department_name} · {person.officer || 'Officer unassigned'}</span>)}</div><form className="inspection-editor-form" onSubmit={save}><div className="inspection-editor-grid"><label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label><label>Checklist JSON<textarea value={checklist} onChange={(event) => setChecklist(event.target.value)} rows={3}/></label></div><label>Findings<textarea value={findings} onChange={(event) => setFindings(event.target.value)}/></label><label>Remarks<textarea value={remarks} onChange={(event) => setRemarks(event.target.value)}/></label><label>Recommendation {status === 'COMPLETED' && <span className="required-label">REQUIRED TO COMPLETE</span>}<textarea value={recommendation} onChange={(event) => setRecommendation(event.target.value)} required={status === 'COMPLETED'}/></label><button className="officer-button primary" disabled={busy}>{busy ? 'Saving…' : 'Save inspection record'}</button></form><label className="inspection-photo-upload">Upload photos<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => void upload(event)}/><small>JPEG, PNG, or WebP · up to 10 files per upload</small></label><div className="inspection-photo-list">{data.photos?.map((photo, index) => <AuthenticatedDownload key={`${photo.file_name}-${index}`} href={photo.download_url || (kind === 'JOINT' ? `/api/officer/joint-inspections/${inspectionId}/photos/${index}` : `/api/officer/inspections/${inspectionId}/photos/${index}`)} fileName={photo.file_name}>{photo.file_name} ↗</AuthenticatedDownload>)}</div></>}</section>
+  return <section className="officer-panel inspection-editor"><PanelHead eyebrow={kind === 'JOINT' ? 'JOINT INSPECTION' : 'DEPARTMENT INSPECTION'} title={data ? `${data.application_number} · ${data.site || data.location}` : 'Inspection details'} action={<button className="officer-button secondary" onClick={onClose}>Close</button>}/>{error && <ErrorBox message={error}/ >}{data && <><div className="inspection-participants">{data.participants?.map((person) => <span key={person.approval_id}>{person.department_name} · {person.officer || 'Officer unassigned'}</span>)}</div><form className="inspection-editor-form" onSubmit={save}><div className="inspection-editor-grid"><label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}>{['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].map((value) => <option key={value} value={value}>{label(value)}</option>)}</select></label><label>Checklist JSON<textarea value={checklist} onChange={(event) => setChecklist(event.target.value)} rows={3}/></label></div><label>Findings<textarea value={findings} onChange={(event) => setFindings(event.target.value)}/></label><label>Remarks<textarea value={remarks} onChange={(event) => setRemarks(event.target.value)}/></label><label>Recommendation {status === 'COMPLETED' && <span className="required-label">REQUIRED TO COMPLETE</span>}<textarea value={recommendation} onChange={(event) => setRecommendation(event.target.value)} required={status === 'COMPLETED'}/></label><button className="officer-button primary" disabled={busy}>{busy ? 'Saving…' : 'Save inspection record'}</button></form><label className="inspection-photo-upload">Upload photos<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => void upload(event)}/><small>JPEG, PNG, or WebP · up to 10 files per upload</small></label><div className="inspection-photo-list">{data.photos?.map((photo, index) => <AuthenticatedDownload key={`${photo.file_name}-${index}`} href={photo.download_url || (kind === 'JOINT' ? apiUrl(`/api/officer/joint-inspections/${inspectionId}/photos/${index}`) : apiUrl(`/api/officer/inspections/${inspectionId}/photos/${index}`))} fileName={photo.file_name}>{photo.file_name} ↗</AuthenticatedDownload>)}</div></>}</section>
 }
 
 function DocumentsPage() {
   const [data, setData] = useState<{ total: number; items: Array<Record<string, string | number>> } | null>(null)
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
-  useEffect(() => { const params = new URLSearchParams(); if (search.trim()) params.set('search', search.trim()); void api<{ total: number; items: Array<Record<string, string | number>> }>(`/api/officer/documents?${params}`).then(setData).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load documents.')) }, [search])
+  useEffect(() => { const params = new URLSearchParams(); if (search.trim()) params.set('search', search.trim()); void api<{ total: number; items: Array<Record<string, string | number>> }>(apiUrl(`/api/officer/documents?${params}`)).then(setData).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load documents.')) }, [search])
   return <><PageHeading title="Application documents" description="Uploaded files and their saved processing status."/><section className="officer-panel"><PanelHead eyebrow="DOCUMENT REGISTER" title={`${data?.total ?? 0} files`}/><div className="queue-filters document-search"><label className="queue-search">Search<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="File, company, application…"/></label></div>{error && <ErrorBox message={error}/ >}{data?.items.length ? <div className="officer-table-scroll"><table className="officer-table"><thead><tr><th>APPLICATION</th><th>DOCUMENT</th><th>TYPE</th><th>FILE STATUS</th><th>UPLOADED</th><th /></tr></thead><tbody>{data.items.map((item) => <tr key={Number(item.id)}><td>{String(item.application_number)}<small>{String(item.company_name ?? '')}</small></td><td>{String(item.file_name)}</td><td>{label(String(item.document_type))}</td><td><StatusBadge value={String(item.status)}/></td><td>{dateLabel(String(item.uploaded_at))}</td><td>{item.approval_id ? <a className="officer-review-link" href={`/officer/approvals/${String(item.approval_id)}`}>Open review →</a> : '—'}</td></tr>)}</tbody></table></div> : data && <Empty message="No application documents found."/>}</section></>
 }
 
 function ReportsPage() {
   const [data, setData] = useState<{ total_active_approvals: number; by_status: Record<string, number>; by_risk: Record<string, number>; sla_breached: number } | null>(null)
   const [error, setError] = useState('')
-  useEffect(() => { void api<typeof data>('/api/officer/reports').then((result) => setData(result)).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load reports.')) }, [])
+  useEffect(() => { void api<typeof data>(apiUrl('/api/officer/reports')).then((result) => setData(result)).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load reports.')) }, [])
   return <><PageHeading title="Review reports" description="Live counts calculated from current approval and risk records."/>{error && <ErrorBox message={error}/>}<section className="officer-metrics report-metrics"><Metric title="ACTIVE APPROVALS" value={data?.total_active_approvals ?? 0}/><Metric title="SLA BREACHED" value={data?.sla_breached ?? 0}/></section><div className="critical-detail-grid"><section className="officer-panel"><PanelHead eyebrow="WORKLOAD" title="Approvals by status"/>{Object.entries(data?.by_status ?? {}).map(([key, value]) => <div className="department-row" key={key}><strong>{label(key)}</strong><span>{value}</span></div>)}</section><section className="officer-panel"><PanelHead eyebrow="PORTFOLIO" title="Approvals by risk tier"/>{Object.entries(data?.by_risk ?? {}).map(([key, value]) => <div className="department-row" key={key}><strong>{label(key)}</strong><span>{value}</span></div>)}</section></div></>
 }
 
 function ProfilePage({ officer }: { officer: Officer }) {
   const [profile, setProfile] = useState<Record<string, string | number | null> | null>(null)
-  useEffect(() => { void api<Record<string, string | number | null>>('/api/officer/profile').then(setProfile) }, [])
+  useEffect(() => { void api<Record<string, string | number | null>>(apiUrl('/api/officer/profile')).then(setProfile) }, [])
   return <><PageHeading title="Officer profile" description="Your authenticated department account."/><section className="officer-panel profile-panel"><span className="profile-avatar">{officer.full_name.slice(0, 1).toUpperCase()}</span><InfoGrid items={[["Name", profile?.name ?? officer.full_name], ["Email", profile?.email ?? officer.email], ["Role", profile?.role ?? officer.role], ["Department", profile?.department], ["Organization", profile?.company]]}/></section></>
 }
 

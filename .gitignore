@@ -6,6 +6,7 @@
 # Node
 node_modules/
 frontend/dist/
+frontend/.vercel/
 npm-debug.log*
 
 # Python

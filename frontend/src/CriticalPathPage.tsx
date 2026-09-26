@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useMemo, useState } from 'react'
 
 type GraphNode = {
@@ -43,7 +44,7 @@ export default function CriticalPathPage({ applicationId }: { applicationId: num
   useEffect(() => {
     const token = localStorage.getItem('mahaclear_access_token')
     if (!token) { window.location.assign('/login'); return }
-    void fetch(`/api/applications/${applicationId}/critical-path`, { headers: { Authorization: `Bearer ${token}` } })
+    void fetch(apiUrl(`/api/applications/${applicationId}/critical-path`), { headers: { Authorization: `Bearer ${token}` } })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}))
         if (!response.ok) throw new Error(body.detail || 'Unable to load the approval schedule.')

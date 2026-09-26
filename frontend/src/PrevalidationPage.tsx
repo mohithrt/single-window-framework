@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { PrevalidationResult } from './applicationTypes'
@@ -44,7 +45,7 @@ export default function PrevalidationPage({ applicationId }: Props) {
     setBusy(true)
     setError('')
     try {
-      const response = await fetch(`/api/applications/${applicationId}/prevalidation${run ? '/run' : ''}`, {
+      const response = await fetch(apiUrl(`/api/applications/${applicationId}/prevalidation${run ? '/run' : ''}`), {
         method: run ? 'POST' : 'GET',
         headers: { Authorization: `Bearer ${accessToken}` },
       })
@@ -70,7 +71,7 @@ export default function PrevalidationPage({ applicationId }: Props) {
           const request = new XMLHttpRequest()
           const body = new FormData()
           body.append('file', file)
-          request.open('POST', `/api/applications/${applicationId}/documents/${replaceId}/replace`)
+          request.open('POST', apiUrl(`/api/applications/${applicationId}/documents/${replaceId}/replace`))
           const accessToken = token()
           if (accessToken) request.setRequestHeader('Authorization', `Bearer ${accessToken}`)
           request.upload.onprogress = (event) => { if (event.lengthComputable) setUploading({ label: file.name, percent: Math.round(100 * event.loaded / event.total) }) }
@@ -79,7 +80,7 @@ export default function PrevalidationPage({ applicationId }: Props) {
           request.send(body)
         })
       } else {
-        await requestUpload(`/api/applications/${applicationId}/documents`, category, file, (percent) => setUploading({ label: file.name, percent }))
+        await requestUpload(apiUrl(`/api/applications/${applicationId}/documents`), category, file, (percent) => setUploading({ label: file.name, percent }))
       }
       await load(true)
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Upload failed.') }
@@ -93,7 +94,7 @@ export default function PrevalidationPage({ applicationId }: Props) {
   }
 
   async function remove(documentId: number) {
-    const response = await fetch(`/api/applications/${applicationId}/documents/${documentId}`, {
+    const response = await fetch(apiUrl(`/api/applications/${applicationId}/documents/${documentId}`), {
       method: 'DELETE', headers: { Authorization: `Bearer ${token()}` },
     })
     if (!response.ok) { setError('Could not delete this document.'); return }
