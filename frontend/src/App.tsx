@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import ApplicantDashboard from './ApplicantDashboard'
+import ApplicantDocumentsPage from './ApplicantDocumentsPage'
 import ApplicantApplicationsPage from './ApplicantApplicationsPage'
 import ApplicationWizard from './ApplicationWizard'
 import ApplicationEntryPage from './ApplicationEntryPage'
@@ -192,6 +193,7 @@ export default function App() {
   if (path === '/login' || path === '/') return <LoginPage />
   if (path === '/notifications') return <WorkspacePage><NotificationCenterPage /></WorkspacePage>
   if (path === '/applicant') return <WorkspacePage><ApplicantDashboard /></WorkspacePage>
+  if (path === '/applicant/documents') return <WorkspacePage><ApplicantDocumentsPage /></WorkspacePage>
   if (path === '/applicant/applications') return <WorkspacePage><ApplicantApplicationsPage /></WorkspacePage>
   if (path === '/applicant/permissions') return <WorkspacePage><ApplicantPermissionsPage /></WorkspacePage>
   if (path === '/applicant/fees') return <WorkspacePage><ApplicantFeesPage /></WorkspacePage>
