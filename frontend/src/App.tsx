@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from 'react'
 import ApplicantDashboard from './ApplicantDashboard'
 import ApplicantApplicationsPage from './ApplicantApplicationsPage'
 import ApplicationWizard, { StartApplication } from './ApplicationWizard'
+import ApplicationEntryPage from './ApplicationEntryPage'
 import PrevalidationPage from './PrevalidationPage'
 import RiskAssessmentPage from './RiskAssessmentPage'
 import ApprovalStatusPage from './ApprovalStatusPage'
@@ -192,7 +193,7 @@ export default function App() {
   if (path === '/applicant') return <WorkspacePage><ApplicantDashboard /></WorkspacePage>
   if (path === '/applicant/applications') return <WorkspacePage><ApplicantApplicationsPage /></WorkspacePage>
   if (path === '/applicant/fees') return <WorkspacePage><ApplicantFeesPage /></WorkspacePage>
-  if (path === '/applicant/applications/new') return <WorkspacePage><StartApplication /></WorkspacePage>
+  if (path === '/applicant/applications/new') return <WorkspacePage><ApplicationEntryPage /></WorkspacePage>
   const prevalidationRoute = path.match(/^\/applicant\/applications\/(\d+)\/prevalidation$/)
   if (prevalidationRoute) { const applicationId = Number(prevalidationRoute[1]); return <WorkspacePage applicationId={applicationId}><PrevalidationPage applicationId={applicationId} /></WorkspacePage> }
   const riskRoute = path.match(/^\/applicant\/applications\/(\d+)\/risk$/)
