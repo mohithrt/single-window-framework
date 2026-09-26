@@ -41,8 +41,8 @@ export default function ApplicantFeesPage() {
   return <div className="applicant-shell">
     <header className="applicant-topbar">
       <a className="brand" href="/applicant"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a>
-      <nav className="applicant-top-nav" aria-label="Applicant navigation"><a href="/applicant">Dashboard</a><a href="/applicant#applications">Applications</a><a className="active" href="/applicant/fees">Fees</a><a href="/notifications">Notifications</a></nav>
-      <button className="applicant-signout" onClick={signOut}>Sign out <span>↗</span></button>
+      <div className="applicant-topbar-spacer" aria-hidden="true" />
+      <button className="applicant-signout" type="button" onClick={signOut}><span className="signout-icon" aria-hidden="true">↪</span><strong>Sign out</strong></button>
     </header>
     <aside className="applicant-sidebar"><div className="workspace-nav-label">APPLICANT WORKSPACE</div>
       <a className="side-link" href="/applicant"><span>◫</span> Dashboard</a>
