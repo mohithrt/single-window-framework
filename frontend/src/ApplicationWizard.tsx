@@ -257,7 +257,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
   }
 
   async function processFiles(files: File[], uploadType = documentType): Promise<boolean> {
-    if (!files.length) return
+    if (!files.length) return false
     setError('')
     setBusy(true)
     try {
