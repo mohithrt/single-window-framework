@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ApplicationsResponse } from './applicationTypes'
-import { formatDate, statusLabel } from './applicationTypes'
+import { formatDate } from './applicationTypes'
 
 type ApplicantUser = { role: string }
 type DashboardApplication = {
@@ -143,7 +143,3 @@ export default function ApplicantDashboard() {
   )
 }
 
-function StatusPill({ status }: { status: string }) {
-  const tone = status === 'APPROVED' ? 'approved' : status === 'REJECTED' ? 'rejected' : status === 'ACTION_REQUIRED' ? 'action' : status === 'IN_REVIEW' ? 'in-review' : status === 'DRAFT' ? 'draft' : 'pending'
-  return <span className={`status-pill ${tone}`}><i />{statusLabel(status as Parameters<typeof statusLabel>[0])}</span>
-}
