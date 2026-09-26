@@ -1347,3 +1347,64 @@ h1,h2,h3,strong { color: var(--ink); }
   .applicant-heading .primary-button,
   .applicant-heading .new-application-button { width: 100%; }
 }
+
+
+/* Simple application entry choices */
+.application-entry-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 40px 24px;
+  background: #f4f8fb;
+}
+.application-entry-card {
+  width: min(100%, 760px);
+  padding: 34px;
+  border: 1px solid #dce7ee;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 35px rgba(8, 47, 73, .06);
+}
+.application-entry-copy { margin: 48px 0 28px; }
+.application-entry-copy h1 {
+  max-width: 620px;
+  margin: 10px 0 9px;
+  color: #18364a;
+  font: 700 clamp(26px, 4vw, 36px)/1.18 Manrope, sans-serif;
+  letter-spacing: -.045em;
+}
+.application-entry-copy p { max-width: 650px; margin: 0; color: #71818d; font-size: 13px; line-height: 1.65; }
+.application-entry-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.entry-option {
+  display: grid;
+  grid-template-columns: 42px 1fr 18px;
+  align-items: center;
+  gap: 14px;
+  min-height: 126px;
+  padding: 20px;
+  border: 1px solid #d8e5ed;
+  border-radius: 10px;
+  background: #fbfdfe;
+  color: #1b3d52;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .15s;
+}
+.entry-option:hover:not(:disabled) { border-color: #8ebbd3; background: #f5fbfe; transform: translateY(-1px); }
+.entry-option:disabled { cursor: wait; opacity: .6; }
+.entry-option-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 9px; background: #edf7fc; color: #0b6eaa; font-size: 20px; }
+.entry-option strong { display: block; margin-bottom: 5px; font: 700 14px Manrope, sans-serif; }
+.entry-option small { display: block; color: #748693; font-size: 11px; line-height: 1.55; }
+.entry-option b { color: #0b6eaa; font-size: 18px; }
+.application-entry-note { display: flex; gap: 10px; align-items: flex-start; margin-top: 17px; padding: 13px 15px; border: 1px solid #e0e9ee; border-radius: 8px; background: #f7fafc; }
+.application-entry-note > span { color: #3b8a61; font-weight: 800; }
+.application-entry-note strong { display: block; color: #405765; font-size: 11px; }
+.application-entry-note small { display: block; margin-top: 3px; color: #84939d; font-size: 10px; line-height: 1.5; }
+.application-entry-status { margin: 14px 0 0; color: #0b6eaa; font-size: 11px; }
+.application-entry-back { display: inline-block; margin-top: 24px; color: #587384; font-size: 11px; text-decoration: none; }
+.application-entry-back:hover { color: #0b6eaa; }
+@media (max-width: 680px) {
+  .application-entry-card { padding: 24px 20px; }
+  .application-entry-copy { margin-top: 38px; }
+  .application-entry-options { grid-template-columns: 1fr; }
+}
