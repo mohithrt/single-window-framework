@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
+import { DOCUMENT_TYPES } from './applicationTypes'
 
-async function createDraft(step: number) {
+async function createDraft(): Promise<number> {
   const token = localStorage.getItem('mahaclear_access_token')
   if (!token) { window.location.assign('/login'); return }
   const response = await fetch('/api/applications', {
@@ -13,7 +14,7 @@ async function createDraft(step: number) {
     throw new Error(body.detail ?? 'Could not start the application.')
   }
   const application = await response.json()
-  window.location.assign(`/applicant/applications/${application.id}/edit?step=${step}`)
+  return application.id as number
 }
 
 export default function ApplicationEntryPage() {
@@ -21,12 +22,17 @@ export default function ApplicationEntryPage() {
   const [error, setError] = useState('')
   const [dragActive, setDragActive] = useState(false)
   const [files, setFiles] = useState<File[]>([])
+  const [documentType, setDocumentType] = useState(DOCUMENT_TYPES[0][0])
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   function addFiles(selected: File[]) {
     const valid: File[] = []
     for (const file of selected) {
-      if (!['application/pdf', 'image/jpeg', 'image/png', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
+      const extension = file.name.toLowerCase().split('.').pop()
+      const allowedMime = ['application/pdf', 'image/jpeg', 'image/png', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+      const allowedExtension = ['pdf', 'jpg', 'jpeg', 'png', 'docx'].includes(extension ?? '')
+      if (!allowedMime.includes(file.type) && !allowedExtension) {
         setError(`${file.name}: upload a PDF, JPG, PNG, or DOCX file.`)
         continue
       }
@@ -60,7 +66,7 @@ export default function ApplicationEntryPage() {
   async function startManual() {
     setBusy(true)
     setError('')
-    try { await createDraft(0) }
+    try { const id = await createDraft(); window.location.assign(`/applicant/applications/${id}/edit?step=0`) }
     catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not start the application.')
       setBusy(false)
@@ -75,10 +81,36 @@ export default function ApplicationEntryPage() {
     setBusy(true)
     setError('')
     try {
-      await createDraft(5)
+      const applicationId = await createDraft()
+      const token = localStorage.getItem('mahaclear_access_token')
+      for (const file of files) {
+        const body = new FormData()
+        body.append('document_type', documentType)
+        body.append('file', file)
+        await new Promise<void>((resolve, reject) => {
+          const request = new XMLHttpRequest()
+          request.open('POST', `/api/applications/${applicationId}/documents`)
+          if (token) request.setRequestHeader('Authorization', `Bearer ${token}`)
+          request.upload.onprogress = (event) => {
+            if (event.lengthComputable) setUploadPercent(Math.round(event.loaded * 100 / event.total))
+          }
+          request.onerror = () => reject(new Error('Upload failed. Check your connection and try again.'))
+          request.onload = () => {
+            if (request.status >= 200 && request.status < 300) resolve()
+            else {
+              let message = 'Document upload failed.'
+              try { message = JSON.parse(request.responseText).detail ?? message } catch { /* generic message */ }
+              reject(new Error(message))
+            }
+          }
+          request.send(body)
+        })
+      }
+      window.location.assign(`/applicant/applications/${applicationId}/edit?step=0`)
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not start the application.')
+      setError(caught instanceof Error ? caught.message : 'Could not upload the documents.')
       setBusy(false)
+      setUploadPercent(null)
     }
   }
 
@@ -114,6 +146,13 @@ export default function ApplicationEntryPage() {
               <button type="button" className="entry-browse-button" disabled={busy} onClick={() => inputRef.current?.click()}>Browse files</button>
               <input ref={inputRef} type="file" hidden multiple accept=".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={onFiles} />
             </div>
+            <label className="entry-document-type">
+              <span>Document type</span>
+              <select value={documentType} onChange={(event) => setDocumentType(event.target.value)} disabled={busy}>
+                {DOCUMENT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            {uploadPercent !== null && <div className="entry-upload-progress"><span>Uploading documents… {uploadPercent}%</span><div><i style={{ width: `${uploadPercent}%` }} /></div></div>}
             {files.length > 0 && <ul className="entry-file-list">{files.map((file, index) => <li key={`${file.name}-${file.size}-${index}`}><span>FILE</span><strong>{file.name}</strong><button type="button" onClick={() => removeFile(index)} disabled={busy}>Remove</button></li>)}</ul>}
             <button type="button" className="entry-continue-button" disabled={busy || files.length === 0} onClick={() => void startWithDocuments()}>
               {busy ? 'Preparing…' : files.length ? `Continue with ${files.length} document${files.length > 1 ? 's' : ''} →` : 'Choose documents to continue'}
