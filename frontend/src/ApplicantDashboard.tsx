@@ -85,8 +85,8 @@ export default function ApplicantDashboard() {
     <div className="applicant-shell">
       <header className="applicant-topbar">
         <a className="brand" href="/applicant"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a>
-        <nav className="applicant-top-nav" aria-label="Applicant navigation"><a className="active" href="/applicant">Dashboard</a><a href="#applications">Applications</a><a href="/applicant/fees">Fees</a><a href="/notifications">Notifications</a></nav>
-        <button className="applicant-signout" onClick={() => { localStorage.removeItem('mahaclear_access_token'); window.location.assign('/login') }}>Sign out <span>↗</span></button>
+        <div className="applicant-topbar-spacer" aria-hidden="true" />
+        <button className="applicant-signout" type="button" onClick={() => { localStorage.removeItem('mahaclear_access_token'); window.location.assign('/login') }}><span className="signout-icon" aria-hidden="true">↪</span><strong>Sign out</strong></button>
       </header>
       <aside className="applicant-sidebar">
         <div className="workspace-nav-label">APPLICANT WORKSPACE</div>
