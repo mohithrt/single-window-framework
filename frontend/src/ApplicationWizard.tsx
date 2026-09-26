@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ChangeEvent, FormEvent, ReactNode } from 'react'
+import type { ChangeEvent, DragEvent, FormEvent, ReactNode } from 'react'
 import {
   APPLICATION_STEPS,
   blankApplication,
@@ -120,6 +120,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
   const [documentType, setDocumentType] = useState<string>(DOCUMENT_TYPES[0][0])
   const [uploaded, setUploaded] = useState<ApplicationDocument[]>([])
   const [uploadPercent, setUploadPercent] = useState<number | null>(null)
+  const [dragActive, setDragActive] = useState(false)
   const saveQueue = useRef<Promise<void>>(Promise.resolve())
   const savedSnapshot = useRef('')
   const valuesRef = useRef(values)
@@ -255,9 +256,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  async function uploadFiles(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? [])
-    event.target.value = ''
+  async function processFiles(files: File[]) {
     if (!files.length) return
     setError('')
     setBusy(true)
@@ -294,6 +293,18 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
       setUploadPercent(null)
       setBusy(false)
     }
+  }
+
+  async function uploadFiles(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    await processFiles(files)
+  }
+
+  function onDropFiles(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setDragActive(false)
+    if (!busy) void processFiles(Array.from(event.dataTransfer.files))
   }
 
   async function removeDocument(documentId: number) {
