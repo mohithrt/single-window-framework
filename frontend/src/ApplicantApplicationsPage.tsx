@@ -36,7 +36,7 @@ export default function ApplicantApplicationsPage() {
         <a className="side-link" href="/applicant"><span>◫</span> Dashboard</a>
         <a className="side-link selected" href="/applicant/applications"><span>▤</span> My applications</a>
         <a className="side-link" href="/applicant/fees"><span>₹</span> Fee ledger</a>
-        <a className="side-link" href="/applicant?notifications=1"><span>◉</span> Notifications</a>
+        <a className="side-link" href="/notifications"><span>◉</span> Notifications</a>
         <div className="sidebar-note"><span className="sidebar-note-mark">✳</span><strong>One window.<br />Every approval.</strong><small>North-Star · SIH 2026</small></div>
         <div className="sidebar-bottom">MAHACLEAR-AI <span>·</span> APPLICANT</div>
       </aside>
