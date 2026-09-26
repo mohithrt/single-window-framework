@@ -1428,3 +1428,10 @@ h1,h2,h3,strong { color: var(--ink); }
 .entry-file-list button { border:0; background:transparent; color:#8a5b5b; font-size:9px; cursor:pointer; }
 .entry-continue-button { width:100%; margin-top:10px; min-height:38px; border:1px solid #0b6eaa; border-radius:7px; background:#0b6eaa; color:#fff; font-size:11px; font-weight:800; cursor:pointer; }
 .entry-continue-button:disabled { opacity:.45; cursor:not-allowed; }
+
+.entry-document-type { display:grid; gap:5px; margin-top:10px; }
+.entry-document-type span { font-size:10px; font-weight:800; color:#526a78; }
+.entry-document-type select { width:100%; min-height:34px; border:1px solid #d8e4ea; border-radius:7px; background:#fff; padding:0 9px; color:#263c48; font-size:11px; }
+.entry-upload-progress { margin-top:9px; color:#526a78; font-size:10px; font-weight:700; }
+.entry-upload-progress > div { height:5px; margin-top:5px; overflow:hidden; border-radius:999px; background:#e7eef2; }
+.entry-upload-progress i { display:block; height:100%; background:#0b6eaa; transition:width .15s ease; }
