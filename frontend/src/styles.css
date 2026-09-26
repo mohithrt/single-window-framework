@@ -1742,3 +1742,30 @@ h1,h2,h3,strong { color: var(--ink); }
   .permission-node-fee { display:none; }
   .permission-detail-grid { grid-template-columns:1fr; gap:14px; }
 }
+
+
+.dashboard-application-list { margin-top:18px; overflow:hidden; border:1px solid #d4e8ef; border-radius:12px; background:rgba(255,255,255,.96); box-shadow:0 10px 28px rgba(0,96,140,.05); }
+.dashboard-list-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:19px 21px; border-bottom:1px solid #e1eff3; background:linear-gradient(90deg,#f3fbff,#f3fcf7); }
+.dashboard-list-heading h2 { margin:5px 0 4px; color:#1b5068; font:700 17px Manrope,sans-serif; }
+.dashboard-list-heading p { margin:0; color:#76909a; font-size:10px; }
+.dashboard-application-cards { display:grid; }
+.dashboard-application-card { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(210px,.8fr) auto; align-items:center; gap:18px; padding:17px 21px; border-bottom:1px solid #edf3f5; }
+.dashboard-application-card:last-child { border-bottom:0; }
+.dashboard-application-card:hover { background:#f7fcfe; }
+.dashboard-application-main { min-width:0; }
+.dashboard-application-main .application-number { color:#0877aa; }
+.dashboard-application-main h3 { margin:6px 0 4px; color:#234f65; font:700 13px Manrope,sans-serif; }
+.dashboard-application-main p { margin:0; color:#79919a; font-size:10px; }
+.dashboard-application-main p strong { color:#4f7180; }
+.dashboard-application-meta { display:grid; gap:5px; justify-items:start; }
+.dashboard-application-meta small { color:#78919b; font-size:9px; }
+.dashboard-application-action { display:inline-flex; align-items:center; gap:7px; color:#0877aa; font-size:10px; font-weight:700; text-decoration:none; white-space:nowrap; }
+.dashboard-application-action:hover { color:#168653; }
+.dashboard-empty { padding:30px 20px; text-align:center; }
+.dashboard-empty h3 { margin:0 0 5px; color:#28556a; font:700 14px Manrope,sans-serif; }
+.dashboard-empty p { margin:0; color:#7d959e; font-size:10px; }
+
+@media (max-width: 760px) {
+  .dashboard-application-card { grid-template-columns:1fr; gap:10px; }
+  .dashboard-application-action { justify-self:start; }
+}
