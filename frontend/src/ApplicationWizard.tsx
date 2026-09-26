@@ -264,7 +264,10 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
       const token = localStorage.getItem('mahaclear_access_token')
       for (const file of files) {
         if (file.size > 15 * 1024 * 1024) throw new Error(`${file.name} exceeds the 15 MB limit.`)
-        if (!['application/pdf', 'image/jpeg', 'image/png', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) throw new Error(`${file.name}: choose a PDF, JPG, PNG, or DOCX file.`)
+        const extension = file.name.toLowerCase().split('.').pop()
+        const allowedMime = ['application/pdf', 'image/jpeg', 'image/png', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
+        const allowedExtension = ['pdf', 'jpg', 'jpeg', 'png', 'docx'].includes(extension ?? '')
+        if (!allowedMime.includes(file.type) && !allowedExtension) throw new Error(`${file.name}: choose a PDF, JPG, PNG, or DOCX file.`)
         const body = new FormData()
         body.append('document_type', uploadType)
         body.append('file', file)
