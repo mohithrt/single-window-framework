@@ -26,8 +26,8 @@ export default function ApplicationEntryPage() {
   function addFiles(selected: File[]) {
     const valid: File[] = []
     for (const file of selected) {
-      if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) {
-        setError(`${file.name}: upload a PDF, JPG, or PNG file.`)
+      if (!['application/pdf', 'image/jpeg', 'image/png', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
+        setError(`${file.name}: upload a PDF, JPG, PNG, or DOCX file.`)
         continue
       }
       if (file.size > 15 * 1024 * 1024) {
@@ -110,9 +110,9 @@ export default function ApplicationEntryPage() {
               onDrop={onDrop}
             >
               <strong>{dragActive ? 'Drop documents here' : 'Drag & drop documents here'}</strong>
-              <span>PDF · JPG · PNG · up to 15 MB each</span>
+              <span>PDF · JPG · PNG · DOCX · up to 15 MB each</span>
               <button type="button" className="entry-browse-button" disabled={busy} onClick={() => inputRef.current?.click()}>Browse files</button>
-              <input ref={inputRef} type="file" hidden multiple accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" onChange={onFiles} />
+              <input ref={inputRef} type="file" hidden multiple accept=".pdf,.jpg,.jpeg,.png,.docx,application/pdf,image/jpeg,image/png,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={onFiles} />
             </div>
             {files.length > 0 && <ul className="entry-file-list">{files.map((file, index) => <li key={`${file.name}-${file.size}-${index}`}><span>FILE</span><strong>{file.name}</strong><button type="button" onClick={() => removeFile(index)} disabled={busy}>Remove</button></li>)}</ul>}
             <button type="button" className="entry-continue-button" disabled={busy || files.length === 0} onClick={() => void startWithDocuments()}>
