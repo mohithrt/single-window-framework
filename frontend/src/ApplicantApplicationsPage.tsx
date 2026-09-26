@@ -33,7 +33,7 @@ export default function ApplicantApplicationsPage() {
 
       <aside className="applicant-sidebar">
         <div className="workspace-nav-label">APPLICANT WORKSPACE</div>
-        <a className="side-link" href="/applicant"><span>◫</span> Dashboard</a>
+        <a className="side-link selected" href="/applicant"><span>◫</span> Dashboard</a>
         <a className="side-link" href="/applicant/permissions"><span>◎</span> Permissions &amp; fees</a>
         <a className="side-link" href="/applicant/applications"><span>▤</span> My applications</a>
         <a className="side-link" href="/notifications"><span>◉</span> Notifications</a>
