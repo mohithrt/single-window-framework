@@ -256,7 +256,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  async function processFiles(files: File[], uploadType = documentType) {
+  async function processFiles(files: File[], uploadType = documentType): Promise<boolean> {
     if (!files.length) return
     setError('')
     setBusy(true)
@@ -287,8 +287,10 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
         setSaveState('Document uploaded')
       }
       await refreshApplication(token)
+      return true
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Upload failed.')
+      return false
     } finally {
       setUploadPercent(null)
       setBusy(false)
@@ -318,7 +320,8 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
       if (!files.length) return
       void (async () => {
         try {
-          await processFiles(files, document.document_type)
+          const uploadedSuccessfully = await processFiles(files, document.document_type)
+          if (!uploadedSuccessfully) return
           await removeDocument(document.id)
           setSaveState('Document replaced')
         } catch {
