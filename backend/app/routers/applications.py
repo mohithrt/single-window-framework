@@ -45,6 +45,7 @@ ALLOWED_DOCUMENT_TYPES = {
     "application/pdf": ".pdf",
     "image/jpeg": ".jpg",
     "image/png": ".png",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
 }
 DOCUMENT_TYPES = set(DOCUMENT_LABELS)
 DOCUMENT_TYPE_ALIASES = {"LAND_DOCUMENT": "LAND_OWNERSHIP_LEASE", "SITE_PLAN": "BUILDING_PLAN", "OTHER": "OTHER_SUPPORTING"}
@@ -62,7 +63,7 @@ def check_file_signature(content: bytes, media_type: str) -> None:
         "image/png": content.startswith(b"\x89PNG\r\n\x1a\n"),
     }
     if not signatures.get(media_type, False):
-        raise HTTPException(status_code=415, detail="The file content does not match its PDF, JPEG, or PNG type")
+        raise HTTPException(status_code=415, detail="The file content does not match its PDF, JPEG, PNG, or DOCX type")
     try:
         if media_type == "application/pdf":
             import fitz
@@ -70,6 +71,12 @@ def check_file_signature(content: bytes, media_type: str) -> None:
             with fitz.open(stream=content, filetype="pdf") as document:
                 if not document.page_count:
                     raise ValueError("PDF has no pages")
+        elif media_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            import zipfile
+            with zipfile.ZipFile(BytesIO(content)) as archive:
+                if "word/document.xml" not in archive.namelist():
+                    raise ValueError("DOCX document body is missing")
+                archive.testzip()
         else:
             from PIL import Image
 
@@ -248,7 +255,7 @@ def upload_document(
         raise HTTPException(status_code=422, detail="Choose a supported document type")
     extension = ALLOWED_DOCUMENT_TYPES.get(file.content_type or "")
     if extension is None:
-        raise HTTPException(status_code=415, detail="Upload a PDF, JPEG, or PNG document")
+        raise HTTPException(status_code=415, detail="Upload a PDF, JPEG, PNG, or DOCX document")
 
     content = file.file.read(MAX_DOCUMENT_SIZE + 1)
     if not content:
