@@ -14,6 +14,7 @@ import MahaClearAssistantPage from './MahaClearAssistantPage'
 import { AdminApplicationPage, AdminAuditPage } from './AdminInspectionPages'
 import ApplicantFeesPage from './ApplicantFeesPage'
 import SystemHealthPage from './SystemHealthPage'
+import AssistantFab from './AssistantFab'
 
 type Role = 'APPLICANT' | 'OFFICER' | 'ADMIN'
 type User = { id: number; email: string; full_name: string; role: Role }
@@ -187,19 +188,19 @@ export default function App() {
   if (path === '/applicant/fees') return <ApplicantFeesPage />
   if (path === '/applicant/applications/new') return <StartApplication />
   const prevalidationRoute = path.match(/^\/applicant\/applications\/(\d+)\/prevalidation$/)
-  if (prevalidationRoute) return <PrevalidationPage applicationId={Number(prevalidationRoute[1])} />
+  if (prevalidationRoute) { const applicationId = Number(prevalidationRoute[1]); return <><PrevalidationPage applicationId={applicationId} /><AssistantFab applicationId={applicationId} /></> }
   const riskRoute = path.match(/^\/applicant\/applications\/(\d+)\/risk$/)
-  if (riskRoute) return <RiskAssessmentPage applicationId={Number(riskRoute[1])} />
+  if (riskRoute) { const applicationId = Number(riskRoute[1]); return <><RiskAssessmentPage applicationId={applicationId} /><AssistantFab applicationId={applicationId} /></> }
   const approvalsRoute = path.match(/^\/applicant\/applications\/(\d+)\/approvals$/)
-  if (approvalsRoute) return <ApprovalStatusPage applicationId={Number(approvalsRoute[1])} />
+  if (approvalsRoute) { const applicationId = Number(approvalsRoute[1]); return <><ApprovalStatusPage applicationId={applicationId} /><AssistantFab applicationId={applicationId} /></> }
   const criticalPathRoute = path.match(/^\/applicant\/applications\/(\d+)\/critical-path$/)
-  if (criticalPathRoute) return <CriticalPathPage applicationId={Number(criticalPathRoute[1])} />
+  if (criticalPathRoute) { const applicationId = Number(criticalPathRoute[1]); return <><CriticalPathPage applicationId={applicationId} /><AssistantFab applicationId={applicationId} /></> }
   const assistantRoute = path.match(/^\/applicant\/applications\/(\d+)\/assistant$/)
   if (assistantRoute) return <MahaClearAssistantPage applicationId={Number(assistantRoute[1])} />
   const activityRoute = path.match(/^\/applicant\/applications\/(\d+)\/activity$/)
-  if (activityRoute) return <ApplicationActivityPage applicationId={Number(activityRoute[1])} />
+  if (activityRoute) { const applicationId = Number(activityRoute[1]); return <><ApplicationActivityPage applicationId={applicationId} /><AssistantFab applicationId={applicationId} /></> }
   const applicationRoute = path.match(/^\/applicant\/applications\/(\d+)\/(edit|view)$/)
-  if (applicationRoute) return <ApplicationWizard applicationId={Number(applicationRoute[1])} readOnly={applicationRoute[2] === 'view'} />
+  if (applicationRoute) { const applicationId = Number(applicationRoute[1]); return <><ApplicationWizard applicationId={applicationId} readOnly={applicationRoute[2] === 'view'} /><AssistantFab applicationId={applicationId} /></> }
   const officerReviewRoute = path.match(/^\/officer\/approvals\/(\d+)$/)
   if (officerReviewRoute) return <OfficerPortal view="review" approvalId={Number(officerReviewRoute[1])} />
   const officerRoutes: Record<string, 'dashboard' | 'queue' | 'inspections' | 'joint-inspections' | 'documents' | 'escalations' | 'reports' | 'profile'> = {
