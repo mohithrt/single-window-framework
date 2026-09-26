@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.dependencies import CurrentUser, require_roles
+from app.fee_service import FeeService
 from app.models import Application, ApplicationFee, RoleCode
 
 router = APIRouter(prefix="/fees", tags=["application fees"], dependencies=[Depends(require_roles(RoleCode.APPLICANT))])
@@ -76,3 +77,22 @@ def application_fees(application_id: int, user: CurrentUser, db: Database) -> li
         status=row.status, due_date=row.due_date, paid_at=row.paid_at,
         receipt_reference=row.receipt_reference,
     ) for row in rows]
+
+
+@router.get("/{application_id}/estimate")
+def estimate_fees(application_id: int, user: CurrentUser, db: Database) -> dict:
+    application = db.scalar(select(Application).where(
+        Application.id == application_id,
+        Application.owner_user_id == user.id,
+    ))
+    if application is None:
+        raise HTTPException(status_code=404, detail="Application not found")
+    items = FeeService().calculate(application)
+    return {
+        "application_id": application.id,
+        "configured": bool(items),
+        "items": items,
+        "total": sum((item["amount"] for item in items), Decimal("0.00")),
+        "currency": items[0]["currency"] if items else "INR",
+        "notice": "Amounts are configuration-driven; no statutory fee is inferred when the fee schedule is empty.",
+    }
