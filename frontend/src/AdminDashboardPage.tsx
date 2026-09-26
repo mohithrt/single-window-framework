@@ -19,7 +19,7 @@ type AdminData = {
   bottleneck_department: string | null
 }
 type Provider = { code: string; name: string; mode: string; connected_to_government: boolean }
-type Integration = { id: number; provider_code: string; application_number: string | null; reference: string; status: string; response: { message?: string; connected_to_government?: boolean }; created_at: string }
+type Integration = { id: number; provider_code: string; application_number: string | null; reference: string; status: string; response: { message?: string; connected_to_government?: boolean; demo?: boolean }; created_at: string }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem('mahaclear_access_token')
