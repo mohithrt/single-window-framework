@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 import AuthenticatedDownload from './AuthenticatedDownload'
 
@@ -16,9 +17,9 @@ export default function ApplicationActivityPage({ applicationId }: { application
     if (!token) { window.location.assign('/login'); return }
     const headers = { Authorization: `Bearer ${token}` }
     void Promise.all([
-      fetch(`/api/applications/${applicationId}/timeline`, { headers }).then(async (res) => { const body = await res.json(); if (!res.ok) throw new Error(body.detail); return body }),
-      fetch(`/api/applications/${applicationId}/inspections`, { headers }).then(async (res) => { const body = await res.json(); if (!res.ok) throw new Error(body.detail); return body }),
-      fetch(`/api/applications/${applicationId}/sla`, { headers }).then(async (res) => { const body = await res.json(); if (!res.ok) throw new Error(body.detail); return body }),
+      fetch(apiUrl(`/api/applications/${applicationId}/timeline`), { headers }).then(async (res) => { const body = await res.json(); if (!res.ok) throw new Error(body.detail); return body }),
+      fetch(apiUrl(`/api/applications/${applicationId}/inspections`), { headers }).then(async (res) => { const body = await res.json(); if (!res.ok) throw new Error(body.detail); return body }),
+      fetch(apiUrl(`/api/applications/${applicationId}/sla`), { headers }).then(async (res) => { const body = await res.json(); if (!res.ok) throw new Error(body.detail); return body }),
     ]).then(([events, checks, service]) => { setTimeline(events); setInspections(checks.items); setSlas(service.items) })
       .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not load application activity.'))
   }, [applicationId])

@@ -23,12 +23,16 @@ from app.application_schemas import (
 from app.core.config import settings
 from app.database import get_db
 from app.dependencies import CurrentUser, require_roles
-from app.models import Application, ApplicationDocument, ApplicationStatus, RoleCode, WorkflowAuditEvent
+from app.models import (
+    Application, ApplicationApproval, ApplicationDocument, ApplicationStatus,
+    ApprovalStatus, RoleCode, WorkflowAuditEvent,
+)
 from app.models import IndustryType, PollutionCategory
 from app.document_processor import DocumentProcessor, get_document_processor
 from app.prevalidation import DOCUMENT_LABELS, prevalidation_payload, run_prevalidation
 from app.models import ApplicationValidationIssue
 from app.workflow_service import WorkflowService
+from app.requirement_engine import DocumentRequirementEngine
 
 router = APIRouter(
     prefix="/applications",
@@ -104,6 +108,28 @@ def ensure_draft(application: Application) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail="Submitted applications can no longer be edited",
         )
+
+
+def ensure_draft_or_correction(db: Session, application: Application) -> bool:
+    """Allow applicant edits only for drafts or while a department correction is open."""
+    if application.status == ApplicationStatus.DRAFT.value:
+        return False
+    if application.status != ApplicationStatus.ACTION_REQUIRED.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only drafts or applications awaiting applicant action can be edited",
+        )
+    correction_open = db.scalar(select(ApplicationApproval.id).where(
+        ApplicationApproval.application_id == application.id,
+        ApplicationApproval.is_required.is_(True),
+        ApplicationApproval.status == ApprovalStatus.DOCUMENT_CORRECTION.value,
+    ).limit(1)) is not None
+    if not correction_open:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Submitted applications can only be edited while a department correction is open",
+        )
+    return True
 
 
 def to_read(application: Application) -> ApplicationRead:
@@ -188,12 +214,23 @@ def save_application_draft(
     db: Database,
 ) -> ApplicationRead:
     application = load_owned_application(db, application_id, user.id)
-    ensure_draft(application)
+    correction_open = ensure_draft_or_correction(db, application)
     changes = payload.model_dump(exclude_unset=True)
     for field, value in changes.items():
         setattr(application, field, normalize_draft_value(field, value))
     if RISK_INPUT_FIELDS.intersection(changes):
         application.risk_tier = None
+    if correction_open and changes:
+        db.add(WorkflowAuditEvent(
+            application_id=application.id, actor_user_id=user.id,
+            action="CORRECTION_DETAILS_UPDATED",
+            message="Applicant updated application details in response to a correction request.",
+            details={"updated_fields": sorted(changes)},
+        ))
+    if changes:
+        # Requirements and value-comparison validation follow the latest saved
+        # draft fields, even before another file is uploaded.
+        run_prevalidation(db, application)
     application.progress_percent = application_progress(application, len(application.documents))
     db.commit()
     db.refresh(application)
@@ -210,7 +247,7 @@ def upload_document(
     processor: Annotated[DocumentProcessor, Depends(get_document_processor)],
 ) -> ApplicationDocumentRead:
     application = load_owned_application(db, application_id, user.id)
-    ensure_draft(application)
+    ensure_draft_or_correction(db, application)
     document_type = DOCUMENT_TYPE_ALIASES.get(document_type, document_type)
     if document_type not in DOCUMENT_TYPES:
         raise HTTPException(status_code=422, detail="Choose a supported document type")
@@ -278,7 +315,7 @@ def replace_document(
     processor: Annotated[DocumentProcessor, Depends(get_document_processor)],
 ) -> ApplicationDocumentRead:
     application = load_owned_application(db, application_id, user.id)
-    ensure_draft(application)
+    ensure_draft_or_correction(db, application)
     document = db.scalar(select(ApplicationDocument).where(
         ApplicationDocument.id == document_id, ApplicationDocument.application_id == application.id
     ))
@@ -338,6 +375,13 @@ def get_prevalidation(application_id: int, user: CurrentUser, db: Database) -> d
     return prevalidation_payload(application, issues)
 
 
+@router.get("/{application_id}/requirements")
+def get_application_requirements(application_id: int, user: CurrentUser, db: Database) -> dict:
+    """Return current, owner-scoped approval and document requirements."""
+    application = load_owned_application(db, application_id, user.id)
+    return DocumentRequirementEngine().evaluate(db, application)
+
+
 @router.post("/{application_id}/prevalidation/run")
 def validate_application_documents(
     application_id: int,
@@ -346,7 +390,7 @@ def validate_application_documents(
     processor: Annotated[DocumentProcessor, Depends(get_document_processor)],
 ) -> dict:
     application = load_owned_application(db, application_id, user.id)
-    ensure_draft(application)
+    ensure_draft_or_correction(db, application)
     for document in application.documents:
         path = (Path(settings.upload_dir).resolve() / document.storage_key).resolve()
         root = Path(settings.upload_dir).resolve()
@@ -393,7 +437,7 @@ def delete_document(
     db: Database,
 ) -> Response:
     application = load_owned_application(db, application_id, user.id)
-    ensure_draft(application)
+    ensure_draft_or_correction(db, application)
     document = db.scalar(
         select(ApplicationDocument).where(
             ApplicationDocument.id == document_id,
@@ -444,20 +488,23 @@ def submit_application(
         action="DOCUMENT_VALIDATED", message="Application documents were pre-validated.",
         details={"issue_count": len(issues), "document_count": len(application.documents)}))
     db.flush()
-    validation_issues = db.scalars(select(ApplicationValidationIssue).where(
-        ApplicationValidationIssue.application_id == application.id
-    )).all()
-    blocking = [issue for issue in validation_issues if issue.status in {"INVALID", "MISSING"}]
+    requirements = DocumentRequirementEngine().evaluate(db, application)
     errors = submission_errors(application, len(application.documents))
-    if blocking:
+    if not requirements["submission_ready"]:
         errors.append("prevalidation")
     if errors:
+        blockers = [item for item in requirements["required_documents"] if item["status"] != "VALID"]
+        # Keep the latest OCR and validation result visible after a blocked
+        # submit attempt; the application itself remains an editable draft.
+        db.commit()
         raise HTTPException(
             status_code=422,
             detail={
-                "message": "Complete the required fields and upload at least one document before submitting.",
+                "message": "Application cannot be submitted until the required documents are uploaded and pass validation." if blockers else "Complete the required application fields before submitting.",
                 "fields": errors,
-                "prevalidation_issues": [issue.message for issue in blocking],
+                "missing_documents": [{"document_type": item["document_type"], "document_name": item["document_name"], "reason": item["reason"]} for item in blockers if item["status"] == "MISSING"],
+                "invalid_documents": [{"document_type": item["document_type"], "document_name": item["document_name"], "status": item["status"], "reason": item["status_reason"], "requirement_reason": item["reason"]} for item in blockers if item["status"] != "MISSING"],
+                "upload_url": f"/applicant/applications/{application.id}/prevalidation",
             },
         )
 

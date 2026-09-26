@@ -152,6 +152,10 @@ npm run dev
 
 The frontend proxies `/api/*` to `http://localhost:8000` when run outside Compose.
 
+## Deploy the frontend with Vercel
+
+The frontend is configured for Vercel as a Vite SPA. Set the Vercel project's Root Directory to `frontend` and configure `VITE_API_BASE_URL` to the production API origin. The API must run separately with PostgreSQL, Tesseract, and persistent upload storage; keep its SLA worker running as a separate service. Follow [the production deployment guide](docs/VERCEL_DEPLOYMENT.md) for required environment variables, migrations, and release checks. Do not use demo seed commands in production.
+
 ## Run the API tests
 
 From `backend/`, after installing the development requirements:

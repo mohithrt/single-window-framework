@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 
@@ -7,7 +8,7 @@ export function AdminApplicationPage({ applicationId }: { applicationId: number 
   const [data, setData] = useState<Record<string, any> | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
-    void fetch(`/api/admin/applications/${applicationId}`, { headers: tokenHeaders() }).then(async (response) => {
+    void fetch(apiUrl(`/api/admin/applications/${applicationId}`), { headers: tokenHeaders() }).then(async (response) => {
       const body = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(body.detail || 'Could not load application oversight record.')
       setData(body)
@@ -28,7 +29,7 @@ export function AdminApplicationPage({ applicationId }: { applicationId: number 
 export function AdminAuditPage() {
   const [items, setItems] = useState<Array<Record<string, any>>>([])
   const [error, setError] = useState('')
-  useEffect(() => { void fetch('/api/admin/audit?limit=250', { headers: tokenHeaders() }).then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.detail || 'Unable to load audit log.'); setItems(body.items) }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load audit log.')) }, [])
+  useEffect(() => { void fetch(apiUrl('/api/admin/audit?limit=250'), { headers: tokenHeaders() }).then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.detail || 'Unable to load audit log.'); setItems(body.items) }).catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Unable to load audit log.')) }, [])
   return <div className="admin-detail-page"><header className="admin-detail-top"><a href="/admin">← Government dashboard</a><a className="brand" href="/admin"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a></header><main className="admin-detail-main"><span className="eyebrow"><i/> APPEND-ONLY WORKFLOW RECORDS</span><h1>Government audit log</h1><p className="admin-detail-subtitle">Recorded application, approval, inspection, and SLA events.</p>{error && <div className="applicant-error">{error}</div>}<section className="admin-panel"><div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>TIME</th><th>APPLICATION</th><th>DEPARTMENT</th><th>ACTION / STATUS</th><th>ACTOR</th><th>DETAIL</th></tr></thead><tbody>{items.map((event) => <tr key={Number(event.id)}><td>{formatDate(event.created_at)}</td><td><a href={`/admin/applications/${event.application_id}`}>{event.application_number || event.application_id}</a></td><td>{event.department || '—'}</td><td><strong>{String(event.action).replaceAll('_', ' ')}</strong><small>{event.to_status || ''}</small></td><td>{event.actor}</td><td>{event.message || '—'}</td></tr>)}</tbody></table></div>{!items.length && <p className="admin-empty">No audit events found.</p>}</section></main></div>
 }
 

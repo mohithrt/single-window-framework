@@ -1,4 +1,5 @@
 import { useState, type MouseEvent, type ReactNode } from 'react'
+import { apiUrl } from './apiBase'
 
 export default function AuthenticatedDownload({ href, fileName, children }: {
   href: string
@@ -16,7 +17,7 @@ export default function AuthenticatedDownload({ href, fileName, children }: {
       return
     }
     try {
-      const response = await fetch(href, { headers: { Authorization: `Bearer ${token}` } })
+      const response = await fetch(apiUrl(href), { headers: { Authorization: `Bearer ${token}` } })
       if (!response.ok) throw new Error('Could not download this inspection photo.')
       const url = URL.createObjectURL(await response.blob())
       const link = document.createElement('a')

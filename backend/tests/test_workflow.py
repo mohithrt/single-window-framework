@@ -18,7 +18,7 @@ def test_rule_selection_and_initial_dependency_states() -> None:
     required = service.determine_required_departments(application)
     assert {"MPCB", "MIDC", "DISH", "FIRE_SERVICES", "GSTN", "MCA21"} <= set(required)
     office_only = Application(industry_type="IT / Software", pollution_category="White", hazardous_materials=False)
-    assert service.determine_required_departments(office_only) == ["MCA21"]
+    assert service.determine_required_departments(office_only) == []
 
 
 def test_critical_path_and_parallel_scenarios_use_dependency_data() -> None:
@@ -123,6 +123,8 @@ def test_workflow_initialization_lifecycle_and_audit(client) -> None:
     assert client.post(f"/api/approvals/{mpcb_id}/start-review", headers=officer_headers).status_code == 200
     assert client.post(f"/api/approvals/{mpcb_id}/request-correction", headers=officer_headers,
                        json={"message": "Upload the signed pollution control plan."}).status_code == 200
+    assert client.patch(f"/api/applications/{application_id}", headers=applicant_headers,
+                        json={"project_description": "Updated to address the pollution control plan clarification."}).status_code == 200
     correction = client.post(f"/api/approvals/{mpcb_id}/correction-submitted", headers=applicant_headers)
     assert correction.status_code == 200
     assert client.post(f"/api/approvals/{mpcb_id}/start-review", headers=officer_headers).status_code == 200

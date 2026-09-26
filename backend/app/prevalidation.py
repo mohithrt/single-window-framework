@@ -4,29 +4,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models import Application, ApplicationDocument, ApplicationValidationIssue
-
-DOCUMENT_LABELS = {
-    "PAN": "PAN",
-    "GST_CERTIFICATE": "GST certificate",
-    "UDYAM_CERTIFICATE": "Udyam certificate",
-    "INCORPORATION_CERTIFICATE": "Incorporation certificate",
-    "LAND_OWNERSHIP_LEASE": "Land ownership / lease documents",
-    "BUILDING_PLAN": "Building plan",
-    "PROJECT_REPORT": "Project report",
-    "ENVIRONMENTAL_DOCUMENTS": "Environmental documents",
-    "FIRE_SAFETY_DOCUMENTS": "Fire safety documents",
-    "FACTORY_DOCUMENTS": "Factory documents",
-    "IDENTITY_DOCUMENT": "Identity documents",
-    "OTHER_SUPPORTING": "Other supporting documents",
-}
+from app.document_catalog import BASE_MANDATORY_DOCUMENTS, DOCUMENT_LABELS
+from app.requirement_engine import DocumentRequirementEngine
 
 # Baseline submission checklist. GST/Udyam/incorporation are optional where the
 # applicant does not have those registrations; submitted files are still checked.
-REQUIRED_DOCUMENTS = {
-    "PAN", "LAND_OWNERSHIP_LEASE", "BUILDING_PLAN", "PROJECT_REPORT",
-    "ENVIRONMENTAL_DOCUMENTS", "FIRE_SAFETY_DOCUMENTS", "FACTORY_DOCUMENTS",
-    "IDENTITY_DOCUMENT",
-}
+# Compatibility name for callers that need the unconditional prototype baseline.
+REQUIRED_DOCUMENTS = BASE_MANDATORY_DOCUMENTS
 EXPECTED_FIELDS = {
     "PAN": "pan",
     "GST_CERTIFICATE": "gstin",
@@ -38,6 +22,7 @@ SEVERITY = {"VALID": 0, "WARNING": 1, "INVALID": 2, "MISSING": 2}
 
 def run_prevalidation(db: Session, application: Application) -> list[ApplicationValidationIssue]:
     documents = list(application.documents)
+    required_documents = DocumentRequirementEngine().required_document_types(application)
     db.execute(delete(ApplicationValidationIssue).where(ApplicationValidationIssue.application_id == application.id))
     issues: list[ApplicationValidationIssue] = []
 
@@ -85,7 +70,7 @@ def run_prevalidation(db: Session, application: Application) -> list[Application
             except ValueError:
                 add(document.document_type, "EXPIRY_UNCLEAR", "WARNING", "Expiry date could not be interpreted.", document, expiry)
 
-    for document_type in sorted(REQUIRED_DOCUMENTS - by_type.keys()):
+    for document_type in sorted(required_documents - by_type.keys()):
         add(document_type, "REQUIRED_MISSING", "MISSING", f"{DOCUMENT_LABELS[document_type]} is required.")
 
     db.add_all(issues)
@@ -101,6 +86,7 @@ def run_prevalidation(db: Session, application: Application) -> list[Application
 
 
 def prevalidation_payload(application: Application, issues: list[ApplicationValidationIssue]) -> dict:
+    required_documents = DocumentRequirementEngine().required_document_types(application)
     issue_dicts = [{
         "id": item.id,
         "document_id": item.document_id,
@@ -118,22 +104,33 @@ def prevalidation_payload(application: Application, issues: list[ApplicationVali
         matching = [item for item in issue_dicts if item["document_type"] == code]
         docs = [doc for doc in application.documents if doc.document_type == code]
         statuses = [item["status"] for item in matching]
-        status = max(statuses, key=SEVERITY.__getitem__) if statuses else ("VALID" if docs else ("MISSING" if code in REQUIRED_DOCUMENTS else "WARNING"))
+        required = code in required_documents
+        if statuses:
+            status = max(statuses, key=SEVERITY.__getitem__)
+        elif docs:
+            document_status = max((doc.status for doc in docs), key=lambda value: SEVERITY.get(value, 1))
+            status = document_status if document_status in SEVERITY else "WARNING"
+        else:
+            status = "MISSING" if required else "WARNING"
         result.append({
             "document_type": code,
             "document_label": label,
             "status": status,
-            "required": code in REQUIRED_DOCUMENTS,
+            "required": required,
             "documents": [{"id": d.id, "file_name": d.file_name, "status": d.status} for d in docs],
             "issues": matching,
         })
     counts = {key: sum(1 for item in result if item["status"] == key) for key in SEVERITY}
+    required_ready = all(
+        item["status"] == "VALID"
+        for item in result if item["required"]
+    )
     return {
         "application_id": application.id,
         "application_number": application.application_number,
         "overall_status": "INVALID" if counts["INVALID"] else "MISSING" if counts["MISSING"] else "WARNING" if counts["WARNING"] else "VALID",
         "counts": counts,
-        "can_submit": not counts["INVALID"] and not counts["MISSING"],
+        "can_submit": required_ready,
         "documents": result,
         "issues": issue_dicts,
         "checked_at": datetime.now(timezone.utc),

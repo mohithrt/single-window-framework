@@ -1,10 +1,12 @@
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import select
 
 from app.database import SessionLocal
 from app.document_processor import ProcessorResult, get_document_processor
 from app.document_processor import TesseractPyMuPDFProcessor
 from app.main import app
-from app.models import Application, ApplicationStatus
+from app.models import Application, ApplicationApproval, ApplicationStatus, ApprovalStatus, WorkflowAuditEvent
 
 PASSWORD = "SecurePassphrase2026!"
 
@@ -150,11 +152,12 @@ def test_submit_requires_valid_data_and_document_then_locks_application(client) 
         ("FACTORY_DOCUMENTS", "factory"),
         ("IDENTITY_DOCUMENT", "identity"),
     ):
+        sample_text = "PAN ABCDE1234F" if category == "PAN" else f"unique {label} supporting document"
         extra = client.post(
             f"/api/applications/{application_id}/documents",
             headers=headers,
             data={"document_type": category},
-            files={"file": (f"{label}.pdf", pdf_bytes(f"unique {label}"), "application/pdf")},
+            files={"file": (f"{label}.pdf", pdf_bytes(sample_text), "application/pdf")},
         )
         assert extra.status_code == 201
 
@@ -239,7 +242,7 @@ def test_prevalidation_required_categories_and_read_endpoint(client) -> None:
     payload = result.json()
     assert payload["overall_status"] == "MISSING"
     assert payload["can_submit"] is False
-    assert payload["counts"]["MISSING"] == 8
+    assert payload["counts"]["MISSING"] == 5
 
 
 def test_pan_consistency_is_reported_as_invalid(client) -> None:
@@ -315,3 +318,38 @@ def test_dashboard_counters_and_application_list(client) -> None:
     }
     assert len(response.json()["applications"]) == 6
     assert client.get("/api/applications").status_code == 401
+
+
+def test_applicant_dashboard_surfaces_current_action_and_hides_private_remarks(client) -> None:
+    token = register_and_authenticate(client, "action.dashboard@example.com")
+    headers = {"Authorization": f"Bearer {token}"}
+    application_id = client.post("/api/applications", headers=headers).json()["id"]
+    with SessionLocal.begin() as db:
+        application = db.get(Application, application_id)
+        application.status = ApplicationStatus.IN_REVIEW.value
+        application.company_name = "Dashboard Test Manufacturing"
+        application.application_number = "MCAI-DASHBOARD-OWNER"
+        db.add(ApplicationApproval(
+            application_id=application_id, department_code="MPCB", department_name="MPCB",
+            is_required=True, status=ApprovalStatus.IN_REVIEW.value, depends_on=[],
+            sla_expected_completion=datetime.now(UTC) - timedelta(days=1),
+        ))
+        db.add_all([
+            WorkflowAuditEvent(application_id=application_id, actor_user_id=application.owner_user_id,
+                action="PUBLIC_REVIEW_UPDATE", message="MPCB review started.", details={},
+                created_at=datetime.now(UTC)),
+            WorkflowAuditEvent(application_id=application_id, actor_user_id=application.owner_user_id,
+                action="REMARK_ADDED", message="Internal officer note.", details={"visibility": "OFFICER"},
+                created_at=datetime.now(UTC) + timedelta(seconds=1)),
+        ])
+
+    dashboard = client.get("/api/applicant/dashboard", headers=headers)
+    assert dashboard.status_code == 200
+    result = dashboard.json()
+    assert result["summary"]["total"] == 1
+    record = result["applications"][0]
+    assert record["id"] == application_id
+    assert record["action_title"] == "Review is past its target date"
+    assert record["current_department_name"] == "MPCB"
+    assert record["latest_update"]["message"] == "MPCB review started."
+    assert "Internal officer note." not in str(result)

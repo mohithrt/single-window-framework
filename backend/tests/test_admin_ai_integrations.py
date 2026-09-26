@@ -40,6 +40,9 @@ def _application(client, email: str | None = None, *, submit: bool = False) -> t
         app.project_location = "Pune"
         app.midc_area = False
         if submit:
+            # A registered company identifier makes MCA21 applicable under
+            # the configured rule now that the department is not a default.
+            app.cin = "U12345MH2020PTC123456"
             app.status = ApplicationStatus.SUBMITTED.value
             app.submitted_at = datetime.now(UTC) - timedelta(days=20)
     if submit:
@@ -72,8 +75,8 @@ def test_assistant_uses_saved_workflow_and_persists_sessions_with_rule_fallback(
                       json={"message": "What if I increase my factory size from 1,000 sq ft to 30,000 sq ft?"})
     assert ask.status_code == 201, ask.text
     result = ask.json()
-    assert result["mode"] == "DEMO_RULE_BASED" and result["llm_used"] is False
-    assert "Demo AI / Rule-based response" in result["message"]["content"]
+    assert result["mode"] == "AI_UNAVAILABLE" and result["llm_used"] is False
+    assert "AI service is temporarily unavailable" in result["message"]["content"]
     assert result["message"]["structured_data"]["risk_change"]["score_after"] > result["message"]["structured_data"]["risk_change"]["score_before"]
     session_id = result["session_id"]
     second = client.post(f"/api/applications/{application_id}/assistant/chat", headers=applicant_headers,
@@ -82,12 +85,12 @@ def test_assistant_uses_saved_workflow_and_persists_sessions_with_rule_fallback(
     history = client.get(f"/api/applications/{application_id}/assistant/sessions/{session_id}", headers=applicant_headers)
     assert history.status_code == 200 and len(history.json()["messages"]) == 4
     monkeypatch.setattr(settings, "llm_api_key", "configured-but-unavailable")
-    from app.routers.assistant import OptionalLLMProvider
-    monkeypatch.setattr(OptionalLLMProvider, "rewrite", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("provider offline")))
+    from app.conversation_manager import OpenAICompatibleLLMProvider
+    monkeypatch.setattr(OpenAICompatibleLLMProvider, "chat", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("provider offline")))
     documents = client.post(f"/api/applications/{application_id}/assistant/chat", headers=applicant_headers,
                             json={"session_id": session_id, "message": "Which documents are missing?"})
     assert documents.status_code == 201
-    assert documents.json()["mode"] == "DEMO_RULE_BASED"
+    assert documents.json()["mode"] == "AI_UNAVAILABLE"
     assert "Missing from this application" in documents.json()["message"]["content"]
     assert documents.json()["message"]["structured_data"]["required_documents"]
     history = client.get(f"/api/applications/{application_id}/assistant/sessions/{session_id}", headers=applicant_headers)

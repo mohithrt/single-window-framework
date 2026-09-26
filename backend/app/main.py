@@ -1,9 +1,10 @@
-import os
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import activity, admin_analytics, applications, assistant, auth, dashboards, fees, notifications, officer, risks, workflow
+from app.core.config import settings
+
+settings.validate_production()
 
 app = FastAPI(
     title="MAHACLEAR-AI API",
@@ -11,10 +12,9 @@ app = FastAPI(
     version="0.1.0",
 )
 
-frontend_origins = os.getenv("FRONTEND_ORIGINS", "http://localhost:5173").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in frontend_origins],
+    allow_origins=settings.frontend_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

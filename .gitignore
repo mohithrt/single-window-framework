@@ -6,6 +6,7 @@
 # Node
 node_modules/
 frontend/dist/
+frontend/.vercel/
 npm-debug.log*
 
 # Python
@@ -13,7 +14,9 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+/backend/.venv312/
 .pytest_cache/
+/backend/.pytest-temp/
 .ruff_cache/
 /backend/uploads/
 /backend/.test-uploads/

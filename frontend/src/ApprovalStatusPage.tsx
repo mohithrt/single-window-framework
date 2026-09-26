@@ -1,7 +1,8 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 
 type WorkflowStatus = 'NOT_STARTED' | 'PENDING' | 'IN_REVIEW' | 'DOCUMENT_CORRECTION' | 'INSPECTION_REQUIRED' | 'APPROVED' | 'REJECTED' | 'ESCALATED'
-type DepartmentApproval = { id: number; department_code: string; department_name: string; is_required: boolean; status: WorkflowStatus; depends_on: string[]; decision_message: string | null; updated_at: string }
+type DepartmentApproval = { id: number; department_code: string; department_name: string; is_required: boolean; status: WorkflowStatus; depends_on: string[]; decision_message: string | null; correction_can_submit: boolean; updated_at: string }
 type WorkflowEvent = { id: number; actor_name: string; action: string; from_status: string | null; to_status: string | null; message: string | null; created_at: string }
 type WorkflowData = { application_id: number; application_number: string; application_status: string; initialized: boolean; approvals: DepartmentApproval[]; audit_events: WorkflowEvent[] }
 
@@ -17,7 +18,7 @@ export default function ApprovalStatusPage({ applicationId }: { applicationId: n
   useEffect(() => {
     const token = localStorage.getItem('mahaclear_access_token')
     if (!token) { window.location.assign('/login'); return }
-    void fetch(`/api/applications/${applicationId}/approvals`, { headers: { Authorization: `Bearer ${token}` } })
+    void fetch(apiUrl(`/api/applications/${applicationId}/approvals`), { headers: { Authorization: `Bearer ${token}` } })
       .then(async (response) => {
         const body = await response.json().catch(() => ({}))
         if (!response.ok) throw new Error(body.detail || 'Unable to load approval statuses.')
@@ -40,6 +41,7 @@ export default function ApprovalStatusPage({ applicationId }: { applicationId: n
                 <p>{approval.is_required ? 'Required department' : 'Not required for this application'}</p>
                 {approval.depends_on.length > 0 && <small>Starts after: {approval.depends_on.join(', ')}</small>}
                 {approval.decision_message && <div className="approval-message"><strong>{approval.status === 'DOCUMENT_CORRECTION' ? 'Action needed' : 'Department note'}</strong><p>{approval.decision_message}</p></div>}
+                {approval.status === 'DOCUMENT_CORRECTION' && data.application_status === 'ACTION_REQUIRED' && <div className="correction-links"><strong>{approval.correction_can_submit ? 'Your response is saved and ready to send.' : 'Update a requested detail or supporting document before sending your response.'}</strong><div><a href={`/applicant/applications/${applicationId}/edit?step=0`}>Review application details →</a><a href={`/applicant/applications/${applicationId}/edit?step=5`}>Update supporting documents →</a></div></div>}
               </div>
             </article>)}
           </section>

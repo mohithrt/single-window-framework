@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 
 type Notification = { id: number; application_id: number | null; notification_type: string; message: string; is_read: boolean; created_at: string }
@@ -9,7 +10,7 @@ export default function NotificationCenterPage() {
   const [error, setError] = useState('')
   const headers = () => ({ Authorization: `Bearer ${localStorage.getItem('mahaclear_access_token') ?? ''}`, 'Content-Type': 'application/json' })
   const refresh = async () => {
-    const response = await fetch('/api/notifications', { headers: headers() })
+    const response = await fetch(apiUrl('/api/notifications'), { headers: headers() })
     const body = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(body.detail || 'Could not load notifications.')
     setData(body)
@@ -18,21 +19,21 @@ export default function NotificationCenterPage() {
     const token = localStorage.getItem('mahaclear_access_token')
     if (!token) { window.location.assign('/login'); return }
     void Promise.all([
-      fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } }).then((response) => response.json()),
+      fetch(apiUrl('/api/auth/me'), { headers: { Authorization: `Bearer ${token}` } }).then((response) => response.json()),
       refresh(),
     ]).then(([user]) => setHome(user.role === 'OFFICER' ? '/officer' : user.role === 'ADMIN' ? '/admin' : '/applicant'))
       .catch((caught: unknown) => setError(caught instanceof Error ? caught.message : 'Could not load notifications.'))
   }, [])
   async function markRead(id: number) {
     try {
-      const response = await fetch(`/api/notifications/${id}/read`, { method: 'PATCH', headers: headers() })
+      const response = await fetch(apiUrl(`/api/notifications/${id}/read`), { method: 'PATCH', headers: headers() })
       if (!response.ok) throw new Error('Could not update notification state.')
       await refresh()
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not update notification state.') }
   }
   async function markAllRead() {
     try {
-      const response = await fetch('/api/notifications/read-all', { method: 'PATCH', headers: headers() })
+      const response = await fetch(apiUrl('/api/notifications/read-all'), { method: 'PATCH', headers: headers() })
       if (!response.ok) throw new Error('Could not update notification state.')
       await refresh()
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Could not update notification state.') }

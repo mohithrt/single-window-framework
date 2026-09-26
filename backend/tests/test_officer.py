@@ -101,6 +101,14 @@ def test_review_actions_persist_and_internal_remarks_are_private(client) -> None
         assert private_remark.details == {"visibility": "OFFICER"}
         assert any(event.action == "CORRECTION_REQUESTED" for event in events)
 
+    premature = client.post(f"/api/approvals/{approval_id}/correction-submitted", headers=applicant_headers)
+    assert premature.status_code == 409
+    updated = client.patch(f"/api/applications/{application_id}", headers=applicant_headers,
+                           json={"project_description": "Updated project details addressing the department clarification request."})
+    assert updated.status_code == 200
+    status_after_edit = client.get(f"/api/applications/{application_id}/approvals", headers=applicant_headers).json()
+    mpcb = next(item for item in status_after_edit["approvals"] if item["id"] == approval_id)
+    assert mpcb["correction_can_submit"] is True
     assert client.post(f"/api/approvals/{approval_id}/correction-submitted", headers=applicant_headers).status_code == 200
     assert client.post(f"/api/approvals/{approval_id}/start-review", headers=officer_headers).status_code == 200
     rejected = client.post(f"/api/approvals/{approval_id}/reject", headers=officer_headers,

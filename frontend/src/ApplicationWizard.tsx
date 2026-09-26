@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import {
@@ -19,7 +20,10 @@ async function errorMessage(response: Response): Promise<string> {
   if (typeof body.detail === 'string') return body.detail
   if (body.detail?.message) {
     const fields: string[] = body.detail.fields ?? []
-    return fields.length ? `${body.detail.message} Missing or invalid: ${fields.join(', ')}.` : body.detail.message
+    const documents = [...(body.detail.missing_documents ?? []), ...(body.detail.invalid_documents ?? [])]
+    const documentNames = documents.map((item: { document_name?: string; status?: string }) => `${item.document_name ?? 'Document'}${item.status ? ` (${item.status.replaceAll('_', ' ').toLowerCase()})` : ''}`)
+    const suffix = [fields.length ? `Application fields: ${fields.join(', ')}.` : '', documentNames.length ? `Documents needing attention: ${documentNames.join('; ')}.` : ''].filter(Boolean).join(' ')
+    return suffix ? `${body.detail.message} ${suffix}` : body.detail.message
   }
   return 'Something went wrong. Please try again.'
 }
@@ -91,7 +95,7 @@ export function StartApplication() {
     started.current = true
     const token = localStorage.getItem('mahaclear_access_token')
     if (!token) { window.location.assign('/login'); return }
-    void fetch('/api/applications', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+    void fetch(apiUrl('/api/applications'), { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
       .then(async (response) => {
         if (!response.ok) throw new Error(await errorMessage(response))
         const application: ApplicationRecord = await response.json()
@@ -108,6 +112,8 @@ export function StartApplication() {
 
 export default function ApplicationWizard({ applicationId, readOnly }: Props) {
   const [application, setApplication] = useState<ApplicationRecord | null>(null)
+  const [correctionApprovalId, setCorrectionApprovalId] = useState<number | null>(null)
+  const [correctionReady, setCorrectionReady] = useState(false)
   const [values, setValues] = useState<ApplicationFormValues>(blankApplication)
   const [step, setStep] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -130,26 +136,38 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     const headers = { Authorization: `Bearer ${token}` }
     void (async () => {
       try {
-        const me = await fetch('/api/auth/me', { headers })
+        const me = await fetch(apiUrl('/api/auth/me'), { headers })
         if (!me.ok) throw new Error('Your session has expired. Sign in again.')
         const account: { role: string } = await me.json()
         if (account.role !== 'APPLICANT') {
           window.location.assign(account.role === 'OFFICER' ? '/officer' : '/admin')
           return
         }
-        const response = await fetch(`/api/applications/${applicationId}`, { headers })
+        const response = await fetch(apiUrl(`/api/applications/${applicationId}`), { headers })
         if (!response.ok) throw new Error(await errorMessage(response))
         const record: ApplicationRecord = await response.json()
         setApplication(record)
+        let openCorrectionId: number | null = null
+        if (!readOnly && record.status !== 'DRAFT') {
+          const workflowResponse = await fetch(apiUrl(`/api/applications/${applicationId}/approvals`), { headers })
+          if (workflowResponse.ok) {
+            const workflow = await workflowResponse.json()
+            const correction = workflow.approvals?.find((item: { status: string }) => item.status === 'DOCUMENT_CORRECTION')
+            openCorrectionId = correction?.id ?? null
+            setCorrectionReady(Boolean(correction?.correction_can_submit))
+          }
+        }
+        setCorrectionApprovalId(openCorrectionId)
         const form = applicationToForm(record)
         setValues(form)
         valuesRef.current = form
         savedSnapshot.current = JSON.stringify(formToDraft(form))
         setUploaded(record.documents ?? [])
-        if (readOnly || record.status !== 'DRAFT') setStep(6)
+        if (readOnly || (record.status !== 'DRAFT' && openCorrectionId === null)) setStep(6)
         else {
           const requestedStep = Number(new URLSearchParams(window.location.search).get('step'))
           if (Number.isInteger(requestedStep) && requestedStep >= 0 && requestedStep <= 7) setStep(requestedStep)
+          else if (openCorrectionId !== null) setStep(0)
         }
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : 'Unable to load this application.')
@@ -159,11 +177,12 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     })()
   }, [applicationId, readOnly])
 
-  const isReadOnly = readOnly || application?.status !== 'DRAFT'
+  const isCorrectionMode = correctionApprovalId !== null && !readOnly
+  const isReadOnly = readOnly || (application?.status !== 'DRAFT' && !isCorrectionMode)
 
   async function sendDraft(snapshot: ApplicationFormValues): Promise<ApplicationRecord> {
     const token = localStorage.getItem('mahaclear_access_token')
-    const response = await fetch(`/api/applications/${applicationId}`, {
+    const response = await fetch(apiUrl(`/api/applications/${applicationId}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(formToDraft(snapshot)),
@@ -172,6 +191,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     const record: ApplicationRecord = await response.json()
     setApplication(record)
     savedSnapshot.current = JSON.stringify(formToDraft(snapshot))
+    if (correctionApprovalId !== null) setCorrectionReady(true)
     return record
   }
 
@@ -182,7 +202,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
   }
 
   async function refreshApplication(token: string | null) {
-    const response = await fetch(`/api/applications/${applicationId}`, {
+    const response = await fetch(apiUrl(`/api/applications/${applicationId}`), {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
     if (response.ok) setApplication(await response.json())
@@ -255,7 +275,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
         body.append('file', file)
         const document: ApplicationDocument = await new Promise((resolve, reject) => {
           const request = new XMLHttpRequest()
-          request.open('POST', `/api/applications/${applicationId}/documents`)
+          request.open('POST', apiUrl(`/api/applications/${applicationId}/documents`))
           if (token) request.setRequestHeader('Authorization', `Bearer ${token}`)
           request.upload.onprogress = (progress) => {
             if (progress.lengthComputable) setUploadPercent(Math.round(progress.loaded * 100 / progress.total))
@@ -268,6 +288,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
           request.send(body)
         })
         setUploaded((current) => [...current, document])
+        if (correctionApprovalId !== null) setCorrectionReady(true)
         setSaveState('Document uploaded')
       }
       await refreshApplication(token)
@@ -281,7 +302,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
 
   async function removeDocument(documentId: number) {
     const token = localStorage.getItem('mahaclear_access_token')
-    const response = await fetch(`/api/applications/${applicationId}/documents/${documentId}`, {
+    const response = await fetch(apiUrl(`/api/applications/${applicationId}/documents/${documentId}`), {
       method: 'DELETE',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
@@ -312,7 +333,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     try {
       if (!(await saveNow(values))) throw new Error('Your draft could not be saved. Please try again.')
       const token = localStorage.getItem('mahaclear_access_token')
-      const response = await fetch(`/api/applications/${applicationId}/submit`, {
+      const response = await fetch(apiUrl(`/api/applications/${applicationId}/submit`), {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -327,6 +348,23 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     }
   }
 
+  async function submitCorrection() {
+    if (correctionApprovalId === null) return
+    setBusy(true)
+    setError('')
+    try {
+      if (!(await saveNow(values))) throw new Error('Your correction could not be saved. Please try again.')
+      const token = localStorage.getItem('mahaclear_access_token')
+      const response = await fetch(apiUrl(`/api/approvals/${correctionApprovalId}/correction-submitted`), {
+        method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!response.ok) throw new Error(await errorMessage(response))
+      window.location.assign(`/applicant/applications/${applicationId}/approvals`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not submit the correction.')
+    } finally { setBusy(false) }
+  }
+
   if (loading) return <main className="wizard-message"><span className="eyebrow"><i /> APPLICATION</span><h1>Loading application…</h1></main>
   if (error && !application) return <main className="wizard-message"><span className="eyebrow"><i /> APPLICATION</span><h1>We couldn’t open this application.</h1><p>{error}</p><a href="/applicant">Return to dashboard</a></main>
   if (!application) return null
@@ -334,16 +372,16 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
 
   return (
     <div className="wizard-shell">
-      <header className="wizard-topbar"><a className="brand" href="/applicant"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a><div className="wizard-top-meta"><span>{submitted ? 'SUBMITTED APPLICATION' : 'APPLICATION DRAFT'}</span><strong>{application.application_number}</strong></div><a className="wizard-exit" href="/applicant">Exit to dashboard <span>↗</span></a></header>
+      <header className="wizard-topbar"><a className="brand" href="/applicant"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a><div className="wizard-top-meta"><span>{isCorrectionMode ? 'CORRECTION RESPONSE' : submitted ? 'SUBMITTED APPLICATION' : 'APPLICATION DRAFT'}</span><strong>{application.application_number}</strong></div><a className="wizard-exit" href="/applicant">Exit to dashboard <span>↗</span></a></header>
       <main className="wizard-main">
-        {submitted && <div className="submitted-banner"><span>✓</span><div><strong>Application submitted</strong><p>Your application is saved. You can track updates from your dashboard.</p></div><a href="/applicant">View dashboard →</a></div>}
-        <div className="wizard-heading"><div><span className="eyebrow"><i /> {submitted ? 'APPLICATION DETAILS' : 'NEW INDUSTRIAL APPROVAL'}</span><h1>{submitted ? 'Application details' : 'Start your application'}</h1><p>Complete each section. Your draft saves automatically as you go.</p></div><div className="wizard-saved"><span className={`save-dot ${saveState.includes('fail') || saveState.includes('could not') ? 'save-error' : ''}`} />{isReadOnly ? submitted ? 'Submitted' : 'Read only' : saveState || 'Draft ready'}</div></div>
+        {isCorrectionMode ? <div className="submitted-banner correction-banner"><span>!</span><div><strong>Department correction requested</strong><p>Update the requested details or supporting files, then submit your correction for review.</p></div><a href={`/applicant/applications/${applicationId}/approvals`}>View request →</a></div> : submitted && <div className="submitted-banner"><span>✓</span><div><strong>Application submitted</strong><p>Your application is saved. You can track updates from your dashboard.</p></div><a href="/applicant">View dashboard →</a></div>}
+        <div className="wizard-heading"><div><span className="eyebrow"><i /> {isCorrectionMode ? 'DEPARTMENT CORRECTION' : submitted ? 'APPLICATION DETAILS' : 'NEW INDUSTRIAL APPROVAL'}</span><h1>{isCorrectionMode ? 'Respond to correction' : submitted ? 'Application details' : 'Start your application'}</h1><p>{isCorrectionMode ? 'Update the requested information or replace a supporting document. Changes save automatically.' : 'Complete each section. Your draft saves automatically as you go.'}</p></div><div className="wizard-saved"><span className={`save-dot ${saveState.includes('fail') || saveState.includes('could not') ? 'save-error' : ''}`} />{isReadOnly ? submitted ? 'Submitted' : 'Read only' : saveState || 'Draft ready'}</div></div>
         <div className="wizard-progress"><div><span>STEP {step + 1} OF 8</span><strong>{APPLICATION_STEPS[step]}</strong></div><div className="wizard-progress-track"><i style={{ width: `${Math.max(application.progress_percent, ((step + 1) / 8) * 100)}%` }} /></div><span>{application.progress_percent}% COMPLETE</span></div>
         <nav className="wizard-step-nav" aria-label="Application steps">{APPLICATION_STEPS.map((label, index) => <button key={label} className={`${index === step ? 'active' : ''} ${index < step ? 'complete' : ''}`} onClick={() => { if (index < step) void goToStep(index) }} disabled={index >= step}><span>{index < step ? '✓' : String(index + 1).padStart(2, '0')}</span><small>{label}</small></button>)}</nav>
 
         <form className="wizard-card" onSubmit={(event: FormEvent<HTMLFormElement>) => event.preventDefault()}>
-          <div className="wizard-card-heading"><div><span className="card-kicker">STEP {String(step + 1).padStart(2, '0')} / 08</span><h2>{APPLICATION_STEPS[step]}</h2><p>{stepDescription(step)}</p></div><span className="wizard-lock">{isReadOnly ? 'VIEW ONLY' : 'SECURE DRAFT'}</span></div>
-          {error && <div className="wizard-error" role="alert">{error}</div>}
+          <div className="wizard-card-heading"><div><span className="card-kicker">STEP {String(step + 1).padStart(2, '0')} / 08</span><h2>{APPLICATION_STEPS[step]}</h2><p>{stepDescription(step)}</p></div><span className="wizard-lock">{isReadOnly ? 'VIEW ONLY' : isCorrectionMode ? 'CORRECTION RESPONSE' : 'SECURE DRAFT'}</span></div>
+          {error && <div className="wizard-error" role="alert">{error}{error.toLowerCase().includes('cannot be submitted') && <p><a href={`/applicant/applications/${applicationId}/prevalidation`}>Open document checklist to fix these items →</a></p>}</div>}
           <div className="wizard-fields">
             {step === 0 && <>
               <Field label="Applicant name" error={fieldErrors.applicant_name}><input autoComplete="name" disabled={isReadOnly} value={values.applicant_name} onChange={(event) => update('applicant_name', event.target.value)} placeholder="Full name of the applicant" /></Field>
@@ -389,15 +427,15 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
               {!isReadOnly && <div className="upload-row"><Field label="Document type"><select value={documentType} onChange={(event) => setDocumentType(event.target.value)}>{DOCUMENT_TYPES.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></Field><label className={`upload-button ${busy ? 'disabled' : ''}`}>Choose files<input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple disabled={busy} onChange={(event) => void uploadFiles(event)} /></label></div>}
               {uploadPercent !== null && <div className="upload-progress-panel"><div><strong>Uploading document</strong><span>{uploadPercent}%</span></div><progress max="100" value={uploadPercent} /></div>}
               {fieldErrors.documents && <p className="field-error">{fieldErrors.documents}</p>}
-              {uploaded.length === 0 ? <div className="no-documents">No documents uploaded yet.</div> : <ul className="document-list">{uploaded.map((document) => <li key={document.id}><span className="file-mark">FILE</span><span className="document-name"><strong>{document.file_name}</strong><small>{documentLabel(document.document_type)} · {formatBytes(document.size_bytes)} · {document.status}</small></span><a href={`/api/applications/${applicationId}/documents/${document.id}/download`} onClick={(event) => { event.preventDefault(); void downloadDocument(applicationId, document.id) }}>Download</a>{!isReadOnly && <button type="button" aria-label={`Remove ${document.file_name}`} onClick={() => void removeDocument(document.id)}>Remove</button>}</li>)}</ul>}
+              {uploaded.length === 0 ? <div className="no-documents">No documents uploaded yet.</div> : <ul className="document-list">{uploaded.map((document) => <li key={document.id}><span className="file-mark">FILE</span><span className="document-name"><strong>{document.file_name}</strong><small>{documentLabel(document.document_type)} · {formatBytes(document.size_bytes)} · {document.status}</small></span><a href={apiUrl(`/api/applications/${applicationId}/documents/${document.id}/download`)} onClick={(event) => { event.preventDefault(); void downloadDocument(applicationId, document.id) }}>Download</a>{!isReadOnly && <button type="button" aria-label={`Remove ${document.file_name}`} onClick={() => void removeDocument(document.id)}>Remove</button>}</li>)}</ul>}
               {!isReadOnly && <button className="secondary-button" type="button" onClick={() => void openPrevalidation()} disabled={busy}>Run document pre-validation →</button>}
             </>}
             {step === 6 && <><Review values={values} application={application} documents={uploaded} /><a className="risk-review-link" href={`/applicant/applications/${applicationId}/risk`}>Open transparent risk assessment <span>→</span></a></>}
-            {step === 7 && <div className="final-submit-panel"><span className="submit-seal">✓</span><span className="card-kicker">FINAL STEP</span><h3>{submitted ? 'Your application has been submitted.' : 'Ready to submit?'}</h3><p>{submitted ? 'The application is locked for editing and appears in your applicant dashboard.' : 'Submitting locks this application draft. It will appear in your dashboard as pending. You can track its status there.'}</p><div className="submit-summary"><span>APPLICATION ID</span><strong>{application.application_number}</strong><span>RISK ASSESSMENT</span><strong>{application.risk_tier || 'Not calculated'}</strong></div><a className="risk-review-link" href={`/applicant/applications/${applicationId}/risk`}>View risk assessment and factors <span>→</span></a></div>}
+            {step === 7 && <div className="final-submit-panel"><span className="submit-seal">{isCorrectionMode ? '↻' : '✓'}</span><span className="card-kicker">FINAL STEP</span><h3>{isCorrectionMode ? 'Ready to submit your correction?' : submitted ? 'Your application has been submitted.' : 'Ready to submit?'}</h3><p>{isCorrectionMode ? correctionReady ? 'Your updated information will return to the requesting department for review.' : 'Update an application detail or upload/replace a document before submitting the response.' : submitted ? 'The application is locked for editing and appears in your applicant dashboard.' : 'Submitting locks this application draft. It will appear in your dashboard as pending. You can track its status there.'}</p><div className="submit-summary"><span>APPLICATION ID</span><strong>{application.application_number}</strong><span>RISK ASSESSMENT</span><strong>{application.risk_tier || 'Not calculated'}</strong></div><a className="risk-review-link" href={`/applicant/applications/${applicationId}/risk`}>View risk assessment and factors <span>→</span></a></div>}
           </div>
           <div className="wizard-actions">
             <div className="wizard-action-left">{step > 0 && <button className="secondary-button" type="button" onClick={() => void goToStep(step - 1)}>← Back</button>}</div>
-            <div className="wizard-action-right">{!isReadOnly && <button className="text-button" type="button" onClick={() => void saveAndExit()} disabled={busy}>Save draft &amp; exit</button>}{step < 7 ? <button className="primary-button" type="button" onClick={() => void goToStep(step + 1)} disabled={busy}>{isReadOnly ? 'Continue' : step === 6 ? 'Review submission' : 'Save & continue'} <span>→</span></button> : !submitted ? <button className="primary-button submit-button" type="button" onClick={() => void submitApplication()} disabled={busy}>{busy ? 'Submitting…' : 'Submit application'} <span>→</span></button> : <a className="primary-button button-link" href="/applicant">Back to dashboard <span>→</span></a>}</div>
+            <div className="wizard-action-right">{!isReadOnly && <button className="text-button" type="button" onClick={() => void saveAndExit()} disabled={busy}>{isCorrectionMode ? 'Save & return' : 'Save draft & exit'}</button>}{step < 7 ? <button className="primary-button" type="button" onClick={() => void goToStep(step + 1)} disabled={busy}>{isReadOnly ? 'Continue' : step === 6 ? 'Review submission' : 'Save & continue'} <span>→</span></button> : isCorrectionMode ? <button className="primary-button submit-button" type="button" onClick={() => void submitCorrection()} disabled={busy || !correctionReady}>{busy ? 'Submitting…' : 'Submit correction'} <span>→</span></button> : !submitted ? <button className="primary-button submit-button" type="button" onClick={() => void submitApplication()} disabled={busy}>{busy ? 'Submitting…' : 'Submit application'} <span>→</span></button> : <a className="primary-button button-link" href="/applicant">Back to dashboard <span>→</span></a>}</div>
           </div>
         </form>
         <div className="wizard-footnote"><span>YOUR DRAFT IS PRIVATE</span><span>Progress saves automatically · No workflow or risk calculation is performed</span></div>
@@ -449,7 +487,7 @@ function withUnit(value: string, unit: string): string { return value ? `${Numbe
 
 async function downloadDocument(applicationId: number, documentId: number) {
   const token = localStorage.getItem('mahaclear_access_token')
-  const response = await fetch(`/api/applications/${applicationId}/documents/${documentId}/download`, {
+  const response = await fetch(apiUrl(`/api/applications/${applicationId}/documents/${documentId}/download`), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!response.ok) return

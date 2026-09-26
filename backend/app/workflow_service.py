@@ -19,7 +19,7 @@ from app.models import (
 )
 
 DEFAULT_RULES_PATH = Path(__file__).resolve().parent / "config" / "workflow_rules.json"
-SUPPORTED_OPERATORS = {"equals", "in", "not_in", "gte", "gt", "lte", "lt", "present", "truthy"}
+SUPPORTED_OPERATORS = {"equals", "in", "not_in", "gte", "gt", "lte", "lt", "present", "truthy", "contains"}
 
 
 class WorkflowService:
@@ -140,6 +140,8 @@ class WorkflowService:
             return value is not None and (not isinstance(value, str) or bool(value.strip()))
         if operator == "truthy":
             return bool(value)
+        if operator == "contains":
+            return isinstance(value, str) and str(expected).casefold() in value.casefold()
         if operator == "equals":
             return value == expected
         if operator == "in":

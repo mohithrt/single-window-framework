@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import ApplicantDashboard from './ApplicantDashboard'
@@ -44,7 +45,7 @@ function LoginPage() {
     setError('')
     setBusy(true)
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -69,7 +70,7 @@ function LoginPage() {
         <button className="primary-button full-width" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'} <span aria-hidden="true">→</span></button>
       </form>
       <p className="auth-switch">New to MAHACLEAR-AI? <a href="/register">Create an account</a></p>
-      <DemoCredentials />
+      {import.meta.env.DEV && <DemoCredentials />}
     </AuthFrame>
   )
 }
@@ -88,7 +89,7 @@ function RegisterPage() {
     setError('')
     setBusy(true)
     try {
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch(apiUrl('/api/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ full_name: fullName, email, company_name: companyName || null, password }),

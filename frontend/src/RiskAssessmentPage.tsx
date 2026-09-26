@@ -1,3 +1,4 @@
+import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 import type { RiskAssessment, RiskResponse } from './applicationTypes'
 
@@ -20,7 +21,7 @@ export default function RiskAssessmentPage({ applicationId }: Props) {
     setBusy(true)
     setError('')
     try {
-      const response = await fetch(`/api/applications/${applicationId}/risk`, {
+      const response = await fetch(apiUrl(`/api/applications/${applicationId}/risk`), {
         headers: { Authorization: `Bearer ${token}` },
       })
       setResult(await readRiskResponse(response))
@@ -35,7 +36,7 @@ export default function RiskAssessmentPage({ applicationId }: Props) {
     setBusy(true)
     setError('')
     try {
-      const response = await fetch(`/api/applications/${applicationId}/risk/recalculate`, {
+      const response = await fetch(apiUrl(`/api/applications/${applicationId}/risk/recalculate`), {
         method: 'POST', headers: { Authorization: `Bearer ${token}` },
       })
       setResult(await readRiskResponse(response))

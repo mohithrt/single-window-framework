@@ -1,24 +1,28 @@
+"""Application-scoped, role-authorized conversational assistant API."""
+
+import json
 from datetime import UTC, datetime
-from types import SimpleNamespace
+import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy import or_, select
+from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
+from app.conversation_manager import ConversationalAssistant
 from app.database import get_db
 from app.dependencies import CurrentUser
-from app.core.config import settings
-from app.llm_provider import OptionalLLMProvider
 from app.models import (
-    AIChatMessage, AIChatSession, Application, ApplicationApproval,
-    Inspection, JointInspection, RoleCode, WorkflowAuditEvent,
+    AIChatMessage, AIChatSession, Application, ApplicationApproval, Department,
+    RoleCode,
 )
 from app.what_if_service import WhatIfService
 
 router = APIRouter(prefix="/applications", tags=["MahaClear AI assistant"])
 Database = Annotated[Session, Depends(get_db)]
+logger = logging.getLogger(__name__)
 
 
 class WhatIfRequest(BaseModel):
@@ -34,13 +38,26 @@ class ChatRequest(BaseModel):
 def _application(db: Session, application_id: int, user: CurrentUser) -> Application:
     query = select(Application).options(
         selectinload(Application.documents), selectinload(Application.approvals),
-        selectinload(Application.risk_assessments),
+        selectinload(Application.risk_assessments), selectinload(Application.workflow_events),
     ).where(Application.id == application_id)
     if user.role.code == RoleCode.APPLICANT.value:
         query = query.where(Application.owner_user_id == user.id)
+    elif user.role.code == RoleCode.OFFICER.value:
+        conditions = [ApplicationApproval.assigned_reviewer_id == user.id]
+        if user.department_id:
+            department_code = db.scalar(select(Department.code).where(Department.id == user.department_id))
+            if department_code:
+                conditions.append(ApplicationApproval.department_code == department_code)
+        authorized_application_ids = select(ApplicationApproval.application_id).where(
+            ApplicationApproval.is_required.is_(True), or_(*conditions),
+        )
+        query = query.where(Application.id.in_(authorized_application_ids))
+    elif user.role.code != RoleCode.ADMIN.value:
+        raise HTTPException(status_code=403, detail="Your role is not allowed to use the assistant")
     application = db.scalar(query)
     if application is None:
-        raise HTTPException(status_code=404, detail="Application not found")
+        # Do not reveal whether another applicant's application exists.
+        raise HTTPException(status_code=404, detail="Application not found or not available to this user")
     return application
 
 
@@ -66,12 +83,12 @@ def list_sessions(application_id: int, user: CurrentUser, db: Database) -> dict:
 @router.post("/{application_id}/assistant/chat", status_code=201)
 def chat(application_id: int, payload: ChatRequest, user: CurrentUser, db: Database) -> dict:
     application = _application(db, application_id, user)
-    service = WhatIfService()
     if payload.session_id is None:
         session = AIChatSession(user_id=user.id, application_id=application.id,
                                 title=payload.message.strip()[:200])
         db.add(session)
         db.flush()
+        history: list[AIChatMessage] = []
     else:
         session = db.scalar(select(AIChatSession).where(
             AIChatSession.id == payload.session_id,
@@ -80,57 +97,27 @@ def chat(application_id: int, payload: ChatRequest, user: CurrentUser, db: Datab
         ))
         if session is None:
             raise HTTPException(status_code=404, detail="Assistant session not found")
-    if payload.proposed_changes is not None:
-        try:
-            structured = service.analyze(application, payload.proposed_changes)
-            risk = structured["risk_change"]
-            response = (
-                "Demo AI / Rule-based response. The configured risk score changes "
-                f"from {risk['score_before']}/100 ({risk['tier_before']}) to {risk['score_after']}/100 ({risk['tier_after']}); "
-                f"the configured workflow duration changes by {structured['estimated_time_change_days']:+d} days. "
-                + " ".join(structured["explanation"])
-            )
-        except (ValueError, TypeError) as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-    else:
-        singles = db.scalars(select(Inspection).options(joinedload(Inspection.approval)).where(
-            Inspection.application_id == application.id,
-        )).all()
-        joints = db.scalars(select(JointInspection).where(
-            JointInspection.application_id == application.id,
-        )).all()
-        inspection_context = [SimpleNamespace(
-            department_name=item.approval.department_name, status=item.status,
-            scheduled_at=item.scheduled_at, site=item.site or item.location,
-        ) for item in singles]
-        inspection_context.extend(SimpleNamespace(
-            department_name="Joint inspection", status=item.status,
-            scheduled_at=item.scheduled_at, site=item.site,
-        ) for item in joints)
-        event_context = db.scalars(select(WorkflowAuditEvent).where(
-            WorkflowAuditEvent.application_id == application.id,
-        ).order_by(WorkflowAuditEvent.created_at, WorkflowAuditEvent.id)).all()
-        response, structured = service.answer(
-            payload.message, application, application.approvals, inspection_context, event_context,
-        )
-    mode = "DEMO_RULE_BASED"
-    if structured is not None and settings.llm_api_key:
-        try:
-            response = OptionalLLMProvider().rewrite(payload.message, structured, response)
-            mode = "LLM_ASSISTED"
-        except Exception:
-            # External provider errors never block or replace the deterministic result.
-            mode = "DEMO_RULE_BASED"
+        history_limit = max(0, min(settings.llm_max_history_messages, 30))
+        history = list(reversed(db.scalars(select(AIChatMessage).where(
+            AIChatMessage.session_id == session.id,
+        ).order_by(AIChatMessage.created_at.desc(), AIChatMessage.id.desc()).limit(history_limit)).all())) if history_limit else []
+
+    question = payload.message.strip()
+    if payload.proposed_changes:
+        question += "\nFor the what-if scenario, evaluate these exact proposed changes: " + json.dumps(payload.proposed_changes)
+    response, mode, metadata = ConversationalAssistant().respond(
+        message=question, history=history, db=db, application=application, user=user,
+    )
     session.updated_at = datetime.now(UTC)
     db.add(AIChatMessage(session=session, role="USER", content=payload.message.strip()))
-    answer = AIChatMessage(session=session, role="ASSISTANT", content=response, structured_data=structured)
+    answer = AIChatMessage(session=session, role="ASSISTANT", content=response, structured_data=metadata)
     db.add(answer)
     db.commit()
     db.refresh(answer)
     return {"session_id": session.id, "message": {
         "id": answer.id, "role": answer.role, "content": answer.content,
         "structured_data": answer.structured_data, "created_at": answer.created_at,
-    }, "mode": mode, "llm_used": mode == "LLM_ASSISTED"}
+    }, "mode": mode, "llm_used": mode == "AI_ASSISTED"}
 
 
 @router.get("/{application_id}/assistant/sessions/{session_id}")
@@ -142,7 +129,8 @@ def get_session(application_id: int, session_id: int, user: CurrentUser, db: Dat
     ))
     if session is None:
         raise HTTPException(status_code=404, detail="Assistant session not found")
+    messages = sorted(session.messages, key=lambda item: (item.created_at, item.id))
     return {"id": session.id, "title": session.title, "messages": [{
         "id": message.id, "role": message.role, "content": message.content,
         "structured_data": message.structured_data, "created_at": message.created_at,
-    } for message in session.messages]}
+    } for message in messages]}
