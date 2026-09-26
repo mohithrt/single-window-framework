@@ -152,11 +152,12 @@ def test_submit_requires_valid_data_and_document_then_locks_application(client) 
         ("FACTORY_DOCUMENTS", "factory"),
         ("IDENTITY_DOCUMENT", "identity"),
     ):
+        sample_text = "PAN ABCDE1234F" if category == "PAN" else f"unique {label} supporting document"
         extra = client.post(
             f"/api/applications/{application_id}/documents",
             headers=headers,
             data={"document_type": category},
-            files={"file": (f"{label}.pdf", pdf_bytes(f"unique {label}"), "application/pdf")},
+            files={"file": (f"{label}.pdf", pdf_bytes(sample_text), "application/pdf")},
         )
         assert extra.status_code == 201
 
@@ -241,7 +242,7 @@ def test_prevalidation_required_categories_and_read_endpoint(client) -> None:
     payload = result.json()
     assert payload["overall_status"] == "MISSING"
     assert payload["can_submit"] is False
-    assert payload["counts"]["MISSING"] == 8
+    assert payload["counts"]["MISSING"] == 5
 
 
 def test_pan_consistency_is_reported_as_invalid(client) -> None:

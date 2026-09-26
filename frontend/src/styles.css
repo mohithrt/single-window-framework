@@ -840,6 +840,33 @@ button, a, input, select, textarea, summary { -webkit-tap-highlight-color: trans
 .applicant-register-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: -5px 0 15px; color: #667985; font-size: 11px; }
 .applicant-register-meta strong { color: #264f67; }
 .applicant-register-meta .latest-update { flex: 1 1 100%; padding: 9px 11px; border-left: 2px solid #5b75bf; background: #f2f5fc; line-height: 1.4; }
+.requirements-dashboard { margin: 0 0 18px; padding: 18px; border: 1px solid #d8e4e9; border-radius: 8px; background: #fff; box-shadow: 0 2px 8px #18374a0a; }
+.requirements-dashboard-head { display: flex; justify-content: space-between; align-items: start; gap: 14px; }
+.requirements-dashboard-head h2 { margin: 5px 0; color: #173d53; font-size: 19px; }
+.requirements-dashboard-head p, .requirements-loading, .requirements-error { margin: 0; color: #667985; font-size: 12px; }
+.requirements-readiness { display: grid; gap: 6px; margin: 15px 0; padding: 12px; border-radius: 6px; background: #f4f8fa; }
+.requirements-readiness > div { display: flex; justify-content: space-between; color: #244c61; font-size: 12px; }
+.requirements-readiness progress { width: 100%; height: 8px; accent-color: #25815c; }
+.requirements-readiness small, .requirements-disclaimer { color: #71828b; font-size: 11px; }
+.requirements-dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 18px; }
+.requirements-dashboard-grid h3 { margin: 5px 0 9px; color: #24495d; font-size: 13px; }
+.requirements-dashboard-grid ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.optional-requirements { margin-top: 10px; padding: 9px; border: 1px solid #e5ecef; border-radius: 6px; color: #58717e; font-size: 11px; }
+.optional-requirements summary { cursor: pointer; font-weight: 700; }.optional-requirements ul { margin-top: 8px; }.optional-requirements li { display: grid; gap: 3px; padding: 7px; background: #f7f9fa; }.optional-requirements li strong { color: #395767; font-size: 11px; }.optional-requirements li small { color: #71828b; line-height: 1.4; }
+.requirement-status, .approval-requirement { display: flex; align-items: flex-start; gap: 9px; padding: 9px; border: 1px solid #e5ecef; border-radius: 6px; }
+.requirement-status > span { display: grid; width: 20px; height: 20px; flex: none; place-items: center; border-radius: 50%; color: #fff; background: #a65b27; font-size: 12px; }
+.requirement-valid > span { background: #25815c; }.requirement-invalid > span, .requirement-expired > span { background: #ba413b; }
+.requirement-status > div, .approval-requirement > div { display: grid; gap: 3px; min-width: 0; }
+.requirement-status strong, .approval-requirement strong { color: #284b5e; font-size: 12px; }
+.requirement-status small, .approval-requirement small { color: #687a83; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.approval-requirement { align-items: center; }
+.requirement-dept-state { min-width: 75px; padding: 4px 6px; border-radius: 4px; color: #405c70; background: #edf3f7; font-size: 9px; text-align: center; }
+.status-pending, .status-not_started { color: #8b5a0a; background: #fff3d9; }.status-in_review { color: #245c8f; background: #e6f1fb; }.status-approved { color: #1f714a; background: #e4f4ea; }.status-rejected, .status-escalated { color: #a32f36; background: #fbe9e9; }
+.requirements-empty { padding: 10px; color: #72818a; font-size: 11px; }
+.submission-readiness { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px 12px; margin-top: 14px; padding: 10px 12px; border-radius: 5px; font-size: 12px; }
+.submission-readiness.ready { color: #1d6946; background: #e9f5ed; }.submission-readiness.blocked { color: #855412; background: #fff4de; }
+.requirements-disclaimer { display: block; margin-top: 8px; line-height: 1.4; }
+.requirements-error { padding: 10px; color: #a03434; background: #fff0f0; }
 @media (max-width: 1200px) {
   .applicant-context-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -847,6 +874,7 @@ button, a, input, select, textarea, summary { -webkit-tap-highlight-color: trans
   .applicant-context-grid { grid-template-columns: 1fr; }
   .applicant-context-grid article { min-height: auto; }
   .applicant-register-meta { gap: 7px 14px; }
+  .requirements-dashboard { padding: 13px; }.requirements-dashboard-head { flex-direction: column; }.requirements-dashboard-grid { grid-template-columns: 1fr; }
 }
 .correction-banner { border-color: #ead7ab; background: #fff9eb; }
 .correction-banner > span { color: #8b641e; background: #f4e6c2; }

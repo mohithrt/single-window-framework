@@ -117,7 +117,7 @@ def applicant_dashboard(user: CurrentUser, db: Session = Depends(get_db)) -> dic
     urgent = next((item for item in items if item["status"] == ApplicationStatus.ACTION_REQUIRED.value or item["sla_overdue"]), None)
     focus = urgent or next((item for item in items if item["status"] in {
         ApplicationStatus.SUBMITTED.value, ApplicationStatus.IN_REVIEW.value,
-    }), None)
+    }), None) or next((item for item in items if item["status"] == ApplicationStatus.DRAFT.value), None) or (items[0] if items else None)
     return {"area": "applicant", "applications": items,
             "summary": {"total": len(items), "status_counts": status_counts,
                         "active": sum(item["status"] in {ApplicationStatus.SUBMITTED.value,

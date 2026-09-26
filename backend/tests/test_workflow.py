@@ -18,7 +18,7 @@ def test_rule_selection_and_initial_dependency_states() -> None:
     required = service.determine_required_departments(application)
     assert {"MPCB", "MIDC", "DISH", "FIRE_SERVICES", "GSTN", "MCA21"} <= set(required)
     office_only = Application(industry_type="IT / Software", pollution_category="White", hazardous_materials=False)
-    assert service.determine_required_departments(office_only) == ["MCA21"]
+    assert service.determine_required_departments(office_only) == []
 
 
 def test_critical_path_and_parallel_scenarios_use_dependency_data() -> None:

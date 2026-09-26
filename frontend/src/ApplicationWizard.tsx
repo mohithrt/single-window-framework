@@ -20,7 +20,10 @@ async function errorMessage(response: Response): Promise<string> {
   if (typeof body.detail === 'string') return body.detail
   if (body.detail?.message) {
     const fields: string[] = body.detail.fields ?? []
-    return fields.length ? `${body.detail.message} Missing or invalid: ${fields.join(', ')}.` : body.detail.message
+    const documents = [...(body.detail.missing_documents ?? []), ...(body.detail.invalid_documents ?? [])]
+    const documentNames = documents.map((item: { document_name?: string; status?: string }) => `${item.document_name ?? 'Document'}${item.status ? ` (${item.status.replaceAll('_', ' ').toLowerCase()})` : ''}`)
+    const suffix = [fields.length ? `Application fields: ${fields.join(', ')}.` : '', documentNames.length ? `Documents needing attention: ${documentNames.join('; ')}.` : ''].filter(Boolean).join(' ')
+    return suffix ? `${body.detail.message} ${suffix}` : body.detail.message
   }
   return 'Something went wrong. Please try again.'
 }
@@ -378,7 +381,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
 
         <form className="wizard-card" onSubmit={(event: FormEvent<HTMLFormElement>) => event.preventDefault()}>
           <div className="wizard-card-heading"><div><span className="card-kicker">STEP {String(step + 1).padStart(2, '0')} / 08</span><h2>{APPLICATION_STEPS[step]}</h2><p>{stepDescription(step)}</p></div><span className="wizard-lock">{isReadOnly ? 'VIEW ONLY' : isCorrectionMode ? 'CORRECTION RESPONSE' : 'SECURE DRAFT'}</span></div>
-          {error && <div className="wizard-error" role="alert">{error}</div>}
+          {error && <div className="wizard-error" role="alert">{error}{error.toLowerCase().includes('cannot be submitted') && <p><a href={`/applicant/applications/${applicationId}/prevalidation`}>Open document checklist to fix these items →</a></p>}</div>}
           <div className="wizard-fields">
             {step === 0 && <>
               <Field label="Applicant name" error={fieldErrors.applicant_name}><input autoComplete="name" disabled={isReadOnly} value={values.applicant_name} onChange={(event) => update('applicant_name', event.target.value)} placeholder="Full name of the applicant" /></Field>

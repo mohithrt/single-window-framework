@@ -13,14 +13,13 @@ from sqlalchemy.orm import Session
 
 from app.critical_path_service import CriticalPathService
 from app.models import (
-    Application, ApplicationApproval, ApplicationValidationIssue,
+    Application, ApplicationApproval,
     Inspection, JointInspection, Notification, RiskAssessment, WorkflowAuditEvent,
 )
-from app.prevalidation import prevalidation_payload
+from app.requirement_engine import DocumentRequirementEngine
 from app.risk_service import RiskService
 from app.sla_service import SlaService
 from app.what_if_service import WhatIfService
-from app.workflow_service import WorkflowService
 
 logger = logging.getLogger(__name__)
 
@@ -128,24 +127,19 @@ def execute_assistant_tool(name: str, arguments: dict[str, Any], *, db: Session,
         return {"approvals": results}
 
     if name == "get_missing_documents":
-        issues = db.scalars(select(ApplicationValidationIssue).where(
-            ApplicationValidationIssue.application_id == application.id,
-        ).order_by(ApplicationValidationIssue.id)).all()
-        result = prevalidation_payload(application, issues)
-        docs = [{"document_type": row["document_type"], "name": row["document_label"],
-                 "required": row["required"], "status": row["status"],
-                 "issues": [issue["message"] for issue in row["issues"]]}
-                for row in result["documents"]]
-        workflow = WorkflowService()
-        required_depts = workflow.determine_required_departments(application)
-        workflow_requirements = sorted({code for dept in required_depts
-                                        for code in workflow.rules.get("document_requirements", {}).get(dept, [])})
-        present_types = {doc.document_type for doc in application.documents}
-        return {"prevalidation_status": result["overall_status"], "checklist": docs,
-                "missing_document_categories": [row["document_type"] for row in docs if row["status"] == "MISSING"],
-                "documents_required_by_current_department_rules": workflow_requirements,
-                "department_rule_documents_not_uploaded": [code for code in workflow_requirements if code not in present_types],
-                "note": "These are prototype checklist and configured department-rule results; consult pre-validation before submission."}
+        result = DocumentRequirementEngine().evaluate(db, application)
+        return _json({
+            "checklist": result["required_documents"],
+            "applicable_approvals": [row for row in result["approvals"] if row["applicable"]],
+            "missing_document_categories": [row["document_type"] for row in result["missing_documents"]],
+            "invalid_document_categories": [row["document_type"] for row in result["invalid_documents"]],
+            "correction_required_categories": [row["document_type"] for row in result["correction_required_documents"]],
+            "counts": result["counts"],
+            "completion_percentage": result["completion_percentage"],
+            "submission_ready": result["submission_ready"],
+            "rules_version": result["rules_version"],
+            "note": result["disclaimer"],
+        })
 
     if name == "get_risk_assessment":
         saved = db.scalar(select(RiskAssessment).where(

@@ -16,6 +16,13 @@ type ApplicantDashboardData = {
   summary: { total: number; active: number; unread_notifications: number; status_counts: Record<string, number> }
   focus_application_id: number | null
 }
+type RequirementSnapshot = {
+  approvals: Array<{ department: string; approval_name: string; applicable: boolean; status: string; reason: string }>
+  required_documents: Array<{ document_type: string; document_name: string; status: string; reason: string; status_reason: string }>
+  documents: Array<{ document_type: string; document_name: string; required: boolean; requirement_type: string; status: string; reason: string }>
+  counts: { required: number; uploaded: number; valid: number; missing: number; needs_correction: number }
+  completion_percentage: number; submission_ready: boolean; disclaimer: string
+}
 
 async function responseMessage(response: Response): Promise<string> {
   const body = await response.json().catch(() => ({}))
@@ -29,6 +36,8 @@ export default function ApplicantDashboard() {
   const [dashboard, setDashboard] = useState<ApplicantDashboardData | null>(null)
   const [error, setError] = useState('')
   const [creating, setCreating] = useState(false)
+  const [requirements, setRequirements] = useState<RequirementSnapshot | null>(null)
+  const [requirementsError, setRequirementsError] = useState('')
 
   useEffect(() => {
     const token = localStorage.getItem('mahaclear_access_token')
@@ -82,6 +91,20 @@ export default function ApplicantDashboard() {
 
   const focusApplication = dashboard?.applications.find(application => application.id === dashboard.focus_application_id)
 
+  useEffect(() => {
+    if (!focusApplication) { setRequirements(null); return }
+    const token = localStorage.getItem('mahaclear_access_token')
+    if (!token) return
+    let cancelled = false
+    setRequirements(null)
+    setRequirementsError('')
+    fetch(apiUrl(`/api/applications/${focusApplication.id}/requirements`), { headers: { Authorization: `Bearer ${token}` } })
+      .then(async response => { if (!response.ok) throw new Error(await responseMessage(response)); return response.json() })
+      .then(payload => { if (!cancelled) setRequirements(payload as RequirementSnapshot) })
+      .catch(caught => { if (!cancelled) setRequirementsError(caught instanceof Error ? caught.message : 'Could not load requirements.') })
+    return () => { cancelled = true }
+  }, [focusApplication?.id])
+
   return (
     <div className="applicant-shell">
       <header className="applicant-topbar">
@@ -130,6 +153,17 @@ export default function ApplicantDashboard() {
                 <small>{focusApplication ? `${focusApplication.approvals_approved} of ${focusApplication.approvals_total} required approvals complete · ${focusApplication.application_number}` : 'A completion estimate is set after the workflow is scheduled.'}</small>
               </article>
             </section>
+            {focusApplication && <section className="requirements-dashboard" aria-labelledby="requirements-heading">
+              <div className="requirements-dashboard-head"><div><span className="card-kicker">APPLICATION READINESS · {focusApplication.application_number}</span><h2 id="requirements-heading">Your Required Approvals &amp; Documents</h2><p>Indicative requirements based on the information entered for this application.</p></div><a className="secondary-button button-link" href={`/applicant/applications/${focusApplication.id}/prevalidation`}>Manage documents →</a></div>
+              {!requirements && !requirementsError && <p role="status" className="requirements-loading">Loading current requirements…</p>}
+              {requirementsError && <p role="alert" className="requirements-error">{requirementsError}</p>}
+              {requirements && <>
+                <div className="requirements-readiness"><div><strong>Documents</strong><span>{requirements.counts.valid} / {requirements.counts.required} valid</span></div><progress max="100" value={requirements.completion_percentage} aria-label={`Document completion ${requirements.completion_percentage}%`}/><small>{requirements.counts.missing} missing · {requirements.counts.needs_correction} need correction · {requirements.completion_percentage}% complete</small></div>
+                <div className="requirements-dashboard-grid"><div><h3>Required documents</h3><ul>{requirements.required_documents.map(item => <li key={item.document_type} className={`requirement-status requirement-${item.status.toLowerCase()}`}><span aria-hidden="true">{item.status === 'VALID' ? '✓' : item.status === 'MISSING' ? '!' : '↻'}</span><div><strong>{item.document_name}</strong><small>{item.status.replaceAll('_', ' ')} · {item.reason}</small>{item.status_reason && item.status !== 'VALID' && <small>{item.status_reason}</small>}</div></li>)}</ul><details className="optional-requirements"><summary>Other document categories ({requirements.documents.filter(item => !item.required).length})</summary><ul>{requirements.documents.filter(item => !item.required).map(item => <li key={item.document_type}><strong>{item.document_name}</strong><small>{item.status.replaceAll('_', ' ')} · {item.reason}</small></li>)}</ul></details></div><div><h3>Applicable approvals</h3><ul>{requirements.approvals.filter(item => item.applicable).map(item => <li className="approval-requirement" key={item.department}><span className={`requirement-dept-state status-${item.status.toLowerCase()}`}>{item.status.replaceAll('_', ' ')}</span><div><strong>{item.approval_name}</strong><small>{item.reason}</small></div></li>)}{requirements.approvals.every(item => !item.applicable) && <li className="requirements-empty">No department approvals match the current configured rules.</li>}</ul></div></div>
+                <div className={`submission-readiness ${requirements.submission_ready ? 'ready' : 'blocked'}`}><strong>{requirements.submission_ready ? 'Document requirements are satisfied' : 'Action required before submission'}</strong><span>{requirements.submission_ready ? 'Your required checklist is currently complete.' : `${requirements.counts.missing + requirements.counts.needs_correction} required document(s) need attention.`}</span></div>
+                <small className="requirements-disclaimer">{requirements.disclaimer}</small>
+              </>}
+            </section>}
             <div className="applicant-register-meta" role="status">
               <span><strong>{dashboard?.summary.total ?? 0}</strong> applications</span>
               <span><strong>{dashboard?.summary.unread_notifications ?? 0}</strong> unread updates</span>

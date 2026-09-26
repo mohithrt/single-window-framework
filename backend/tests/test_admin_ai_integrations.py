@@ -40,6 +40,9 @@ def _application(client, email: str | None = None, *, submit: bool = False) -> t
         app.project_location = "Pune"
         app.midc_area = False
         if submit:
+            # A registered company identifier makes MCA21 applicable under
+            # the configured rule now that the department is not a default.
+            app.cin = "U12345MH2020PTC123456"
             app.status = ApplicationStatus.SUBMITTED.value
             app.submitted_at = datetime.now(UTC) - timedelta(days=20)
     if submit:

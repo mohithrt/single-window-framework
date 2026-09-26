@@ -32,6 +32,7 @@ from app.document_processor import DocumentProcessor, get_document_processor
 from app.prevalidation import DOCUMENT_LABELS, prevalidation_payload, run_prevalidation
 from app.models import ApplicationValidationIssue
 from app.workflow_service import WorkflowService
+from app.requirement_engine import DocumentRequirementEngine
 
 router = APIRouter(
     prefix="/applications",
@@ -226,6 +227,10 @@ def save_application_draft(
             message="Applicant updated application details in response to a correction request.",
             details={"updated_fields": sorted(changes)},
         ))
+    if changes:
+        # Requirements and value-comparison validation follow the latest saved
+        # draft fields, even before another file is uploaded.
+        run_prevalidation(db, application)
     application.progress_percent = application_progress(application, len(application.documents))
     db.commit()
     db.refresh(application)
@@ -370,6 +375,13 @@ def get_prevalidation(application_id: int, user: CurrentUser, db: Database) -> d
     return prevalidation_payload(application, issues)
 
 
+@router.get("/{application_id}/requirements")
+def get_application_requirements(application_id: int, user: CurrentUser, db: Database) -> dict:
+    """Return current, owner-scoped approval and document requirements."""
+    application = load_owned_application(db, application_id, user.id)
+    return DocumentRequirementEngine().evaluate(db, application)
+
+
 @router.post("/{application_id}/prevalidation/run")
 def validate_application_documents(
     application_id: int,
@@ -476,20 +488,23 @@ def submit_application(
         action="DOCUMENT_VALIDATED", message="Application documents were pre-validated.",
         details={"issue_count": len(issues), "document_count": len(application.documents)}))
     db.flush()
-    validation_issues = db.scalars(select(ApplicationValidationIssue).where(
-        ApplicationValidationIssue.application_id == application.id
-    )).all()
-    blocking = [issue for issue in validation_issues if issue.status in {"INVALID", "MISSING"}]
+    requirements = DocumentRequirementEngine().evaluate(db, application)
     errors = submission_errors(application, len(application.documents))
-    if blocking:
+    if not requirements["submission_ready"]:
         errors.append("prevalidation")
     if errors:
+        blockers = [item for item in requirements["required_documents"] if item["status"] != "VALID"]
+        # Keep the latest OCR and validation result visible after a blocked
+        # submit attempt; the application itself remains an editable draft.
+        db.commit()
         raise HTTPException(
             status_code=422,
             detail={
-                "message": "Complete the required fields and upload at least one document before submitting.",
+                "message": "Application cannot be submitted until the required documents are uploaded and pass validation." if blockers else "Complete the required application fields before submitting.",
                 "fields": errors,
-                "prevalidation_issues": [issue.message for issue in blocking],
+                "missing_documents": [{"document_type": item["document_type"], "document_name": item["document_name"], "reason": item["reason"]} for item in blockers if item["status"] == "MISSING"],
+                "invalid_documents": [{"document_type": item["document_type"], "document_name": item["document_name"], "status": item["status"], "reason": item["status_reason"], "requirement_reason": item["reason"]} for item in blockers if item["status"] != "MISSING"],
+                "upload_url": f"/applicant/applications/{application.id}/prevalidation",
             },
         )
 
