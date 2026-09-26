@@ -1145,3 +1145,12 @@ h1,h2,h3,strong { color: var(--ink); }
 /* Applicant information architecture */
 .applicant-register-meta .context-link { margin-left: auto; color: #0b6eaa; font-weight: 800; text-decoration: none; }
 .applicant-register-meta .context-link:hover { text-decoration: underline; }
+
+/* Right-side applicant notification drawer */
+.notification-drawer-backdrop{position:fixed;inset:0;z-index:1100;background:rgba(8,47,73,.22);backdrop-filter:blur(2px)}
+.notification-drawer{position:absolute;top:0;right:0;width:min(440px,94vw);height:100%;display:grid;grid-template-rows:auto auto 1fr;background:#fff;border-left:1px solid #cfe1eb;box-shadow:-18px 0 55px rgba(8,47,73,.2)}
+.notification-drawer>header{display:flex;justify-content:space-between;gap:18px;padding:22px;border-bottom:1px solid #dbe7ee;background:linear-gradient(135deg,#f7fbfd,#eef8fc)}
+.notification-drawer>header h2{margin:7px 0 4px;font:800 24px Manrope,sans-serif;color:#17324d}.notification-drawer>header p{margin:0;color:#60788b;font-size:12px}.notification-drawer>header>button{width:38px;height:38px;border:1px solid #c8dce8;border-radius:9px;background:#fff;color:#315b78;font-size:25px;cursor:pointer}
+.notification-drawer-actions{padding:11px 16px;border-bottom:1px solid #e1ebf0}.notification-drawer-actions button{border:1px solid #b9d5e4;border-radius:7px;background:#f3faff;color:#075985;padding:8px 11px;font-size:11px;font-weight:800;cursor:pointer}.notification-drawer-actions button:disabled{opacity:.45;cursor:default}
+.notification-drawer-list{overflow:auto;padding:10px}.drawer-notification{display:grid;grid-template-columns:8px 1fr auto;gap:11px;padding:14px 10px;border-bottom:1px solid #e6eef3}.drawer-notification>i{width:7px;height:7px;margin-top:6px;border-radius:50%;background:#0f9f9a;box-shadow:0 0 0 4px #e7f7f6}.drawer-notification.read>i{background:#aebec7;box-shadow:none}.drawer-notification strong{display:block;color:#23485f;font-size:12px;line-height:1.45}.drawer-notification small{display:block;margin-top:5px;color:#8193a0;font-size:10px}.drawer-notification a{display:inline-block;margin-top:8px;color:#0b6eaa;font-size:10px;font-weight:800;text-decoration:none}.drawer-notification>button{align-self:start;border:0;background:transparent;color:#0b6eaa;font-size:10px;font-weight:800;cursor:pointer}.notification-drawer-error{margin:10px 14px;padding:9px;border:1px solid #f0d0c7;background:#fff5f2;color:#9d4c38;font-size:11px;border-radius:6px}
+@media(max-width:640px){.notification-drawer{width:100%}}
