@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.analytics_service import AnalyticsService
+from app.cache_service import CacheService
 from app.critical_path_service import CriticalPathService
 from app.database import get_db
 from app.dependencies import CurrentUser, require_roles
@@ -33,8 +34,18 @@ def admin_system_health(db: Database) -> dict:
 
 
 @router.get("/analytics")
-def admin_analytics(db: Database) -> dict:
-    return AnalyticsService().dashboard(db)
+def admin_analytics(db: Database, fresh: bool = Query(default=False)) -> dict:
+    cache = CacheService()
+    key = "admin:analytics:v2"
+    if not fresh:
+        cached = cache.get(key)
+        if isinstance(cached, dict):
+            cached["cache"] = {"hit": True, "ttl_seconds": 120}
+            return cached
+    report = AnalyticsService().dashboard(db)
+    cache.set(key, report, ttl=120)
+    report["cache"] = {"hit": False, "ttl_seconds": 120}
+    return report
 
 
 @router.get("/departments")
