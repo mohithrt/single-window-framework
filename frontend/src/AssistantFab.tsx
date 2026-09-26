@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 
 type Role = 'APPLICANT' | 'OFFICER' | 'ADMIN'
 type Message = { role: 'user' | 'assistant'; content: string; createdAt: number }
