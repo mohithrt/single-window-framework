@@ -730,6 +730,15 @@ button, a, input, select, textarea, summary { -webkit-tap-highlight-color: trans
 .assistant-messages { overflow-wrap: anywhere; }
 .assistant-message, .assistant-suggestions button, .assistant-compose textarea { font-size: 12px; }
 .assistant-impact > div, .assistant-impact b { font-size: 11px; }
+.assistant-mode.unavailable { color: #9b5a19; border-color: #f2d5ad; background: #fff8ee; }
+.assistant-message time { display: block; margin-top: 7px; color: #8b978e; font-size: 10px; }
+.assistant-message.user time { color: #c7d9cd; }
+.assistant-grounding { display: block; margin-top: 8px; color: #6b8873; font-size: 10px; }
+.assistant-spinner { display: inline-block; width: 12px; height: 12px; margin-right: 7px; border: 2px solid #dce8df; border-top-color: #42815a; border-radius: 50%; vertical-align: -2px; animation: assistant-spin .8s linear infinite; }
+@keyframes assistant-spin { to { transform: rotate(360deg); } }
+.assistant-retry { align-self: flex-start; margin: 8px 0; padding: 7px 10px; border: 1px solid #e8cda9; border-radius: 5px; color: #8e571d; background: #fffaf3; cursor: pointer; font-size: 11px; }
+.assistant-history > button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .assistant-spinner { animation: none; } }
 .risk-info-divider, .submitted-banner, .fee-disclaimer { border-radius: 7px; }
 .fee-disclaimer { margin: 0 0 14px; padding: 12px 14px; border: 1px solid #ead9ae; color: #755b22; background: #fff9e8; font-size: 12px; line-height: 1.5; }
 .fee-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
