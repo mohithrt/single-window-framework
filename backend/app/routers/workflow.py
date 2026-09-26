@@ -85,6 +85,18 @@ def _activate_ready(db: Session, application: Application, actor_id: int) -> Non
 def _serialize(application: Application) -> dict:
     approvals = sorted(application.approvals, key=lambda item: item.id)
     events = sorted(application.workflow_events, key=lambda item: (item.created_at, item.id))
+    def correction_can_submit(approval: ApplicationApproval) -> bool:
+        if approval.status != ApprovalStatus.DOCUMENT_CORRECTION.value:
+            return False
+        requests = [event.id for event in events
+                    if event.approval_id == approval.id and event.action == "CORRECTION_REQUESTED"]
+        if not requests:
+            return False
+        request_id = max(requests)
+        response_actions = {"CORRECTION_DETAILS_UPDATED", "DOCUMENT_UPLOADED", "DOCUMENT_RESUBMITTED"}
+        return any(event.id > request_id and event.actor_user_id == application.owner_user_id
+                   and event.action in response_actions for event in events)
+
     return {
         "application_id": application.id,
         "application_number": application.application_number,
@@ -95,6 +107,7 @@ def _serialize(application: Application) -> dict:
             "department_name": item.department_name, "is_required": item.is_required,
             "status": item.status, "depends_on": item.depends_on,
             "decision_message": item.decision_message,
+            "correction_can_submit": correction_can_submit(item),
             "created_at": item.created_at, "updated_at": item.updated_at,
             "decided_at": item.decided_at,
         } for item in approvals],
@@ -200,9 +213,27 @@ def correction_submitted(approval_id: int, user: CurrentUser, db: Database) -> d
     approval = _approval(db, approval_id)
     if approval.application.owner_user_id != user.id or user.role.code != RoleCode.APPLICANT.value:
         raise HTTPException(status_code=404, detail="Approval record not found")
+    if approval.application.status != ApplicationStatus.ACTION_REQUIRED.value:
+        raise HTTPException(status_code=409, detail="This application is not awaiting an applicant correction")
     if approval.status != ApprovalStatus.DOCUMENT_CORRECTION.value:
         raise HTTPException(status_code=409, detail="This approval is not waiting for a correction")
+    correction_request_id = db.scalar(select(WorkflowAuditEvent.id).where(
+        WorkflowAuditEvent.approval_id == approval.id,
+        WorkflowAuditEvent.action == "CORRECTION_REQUESTED",
+    ).order_by(WorkflowAuditEvent.id.desc()).limit(1))
+    response_actions = {"CORRECTION_DETAILS_UPDATED", "DOCUMENT_UPLOADED", "DOCUMENT_RESUBMITTED"}
+    response_event = db.scalar(select(WorkflowAuditEvent.id).where(
+        WorkflowAuditEvent.application_id == approval.application_id,
+        WorkflowAuditEvent.actor_user_id == user.id,
+        WorkflowAuditEvent.id > (correction_request_id or 0),
+        WorkflowAuditEvent.action.in_(response_actions),
+    ).limit(1))
+    if response_event is None:
+        raise HTTPException(status_code=409, detail="Update application details or upload/replace a document before submitting the correction")
     _transition(db, approval, user.id, ApprovalStatus.PENDING, "CORRECTION_SUBMITTED", "Applicant submitted the requested correction.")
+    approval.sla_started_at = datetime.now(UTC)
+    approval.escalated_at = None
+    SlaService().prime(approval)
     notify_staff(db, approval.application, "CORRECTION_SUBMITTED",
                  f"The applicant submitted a correction for {approval.department_name}.", approval.assigned_reviewer_id)
     _refresh_application_status(db, approval.application)
