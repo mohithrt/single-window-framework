@@ -26,9 +26,9 @@ type ApprovalDetail = {
 type Inspection = { id: number; application_id: number; approval_id: number | null; approval_ids?: number[]; application_number: string; department_name: string; inspection_type: string; status: string; scheduled_at: string; location: string; site?: string; instructions: string | null; scheduled_by: string | null; checklist?: Array<Record<string, unknown>>; findings?: string | null; photos?: Array<{ file_name: string; download_url?: string }>; remarks?: string | null; recommendation?: string | null; participants?: Array<{ approval_id: number; department_code: string; department_name: string; officer: string | null; status: string }> }
 
 const nav: Array<[View, string, string]> = [
-  ['dashboard', 'Dashboard', '◫'], ['queue', 'Application Queue', '▤'], ['inspections', 'Inspections', '⌖'],
+  ['dashboard', 'Dashboard', '◫'], ['queue', 'Application Queue', '▤'], ['inspections', 'Inspections', '☑'],
   ['joint-inspections', 'Joint Inspections', '⇄'], ['documents', 'Documents', '▧'],
-  ['escalations', 'Escalations', '⚑'], ['reports', 'Reports', '▥'], ['profile', 'Profile', '○'],
+  ['escalations', 'Escalations', '⚑'], ['reports', 'Reports', '▥'], ['profile', 'Profile', '◉'],
 ]
 const label = (value: string | null | undefined) => value ? value.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()) : '—'
 const dateLabel = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
@@ -56,7 +56,7 @@ export default function OfficerPortal({ view, approvalId }: { view: View; approv
   const titles: Record<View, string> = { dashboard: 'Officer dashboard', queue: view === 'escalations' ? 'Escalated applications' : 'Application queue', inspections: 'Inspections', 'joint-inspections': 'Joint inspections', documents: 'Documents', escalations: 'Escalations', reports: 'Reports', profile: 'Officer profile', review: 'Application review' }
 
   return <div className="officer-shell">
-    <header className="officer-topbar"><a className="brand" href="/officer"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a><div className="officer-top-label">DEPARTMENT REVIEW PORTAL</div><a className="officer-notification-link" href="/notifications">Notifications</a><button className="signout-button" onClick={signOut}>Sign out <span>↗</span></button></header>
+    <header className="officer-topbar"><a className="brand" href="/officer"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a><div className="officer-top-label">DEPARTMENT REVIEW PORTAL</div><a className="officer-notification-link" href="/notifications">Notifications</a><button className="signout-button" onClick={signOut}><span className="signout-icon" aria-hidden="true">↪</span><strong>Sign out</strong></button></header>
     <aside className="officer-sidebar"><div className="workspace-nav-label">OFFICER WORKSPACE</div>{nav.map(([key, name, icon]) => <a key={key} className={`side-link ${view === key || (view === 'review' && key === 'queue') ? 'selected' : ''}`} href={`/officer${key === 'dashboard' ? '' : `/${key}`}`}><span>{icon}</span>{name}</a>)}<div className="officer-sidebar-bottom"><strong>{officer?.full_name ?? 'Officer'}</strong><small>{officer?.email ?? 'Verified staff account'}</small></div></aside>
     <main className="officer-main"><div className="breadcrumb">OFFICER WORKSPACE <span>/</span> {titles[view].toUpperCase()}</div>
       {authError ? <div className="applicant-error" role="alert">{authError}</div> : !officer ? <div className="loading-panel">Verifying officer access…</div> : <>

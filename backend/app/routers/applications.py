@@ -45,6 +45,7 @@ ALLOWED_DOCUMENT_TYPES = {
     "application/pdf": ".pdf",
     "image/jpeg": ".jpg",
     "image/png": ".png",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
 }
 DOCUMENT_TYPES = set(DOCUMENT_LABELS)
 DOCUMENT_TYPE_ALIASES = {"LAND_DOCUMENT": "LAND_OWNERSHIP_LEASE", "SITE_PLAN": "BUILDING_PLAN", "OTHER": "OTHER_SUPPORTING"}
@@ -55,14 +56,30 @@ RISK_INPUT_FIELDS = {
 }
 
 
+def detect_document_media_type(content: bytes, filename: str | None, declared_type: str | None) -> str | None:
+    """Detect the real document type even when the browser sends a generic MIME type."""
+    normalized = (declared_type or "").split(";")[0].strip().lower()
+    suffix = Path(filename or "").suffix.lower()
+
+    if content.startswith(b"%PDF-"):
+        return "application/pdf"
+    if content.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+
+    if suffix == ".docx" or normalized == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        try:
+            import zipfile
+            with zipfile.ZipFile(BytesIO(content)) as archive:
+                if "word/document.xml" in archive.namelist() and archive.testzip() is None:
+                    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        except zipfile.BadZipFile:
+            return None
+    return None
+
+
 def check_file_signature(content: bytes, media_type: str) -> None:
-    signatures = {
-        "application/pdf": content.startswith(b"%PDF-"),
-        "image/jpeg": content.startswith(b"\xff\xd8\xff"),
-        "image/png": content.startswith(b"\x89PNG\r\n\x1a\n"),
-    }
-    if not signatures.get(media_type, False):
-        raise HTTPException(status_code=415, detail="The file content does not match its PDF, JPEG, or PNG type")
     try:
         if media_type == "application/pdf":
             import fitz
@@ -70,6 +87,12 @@ def check_file_signature(content: bytes, media_type: str) -> None:
             with fitz.open(stream=content, filetype="pdf") as document:
                 if not document.page_count:
                     raise ValueError("PDF has no pages")
+        elif media_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            import zipfile
+            with zipfile.ZipFile(BytesIO(content)) as archive:
+                if "word/document.xml" not in archive.namelist():
+                    raise ValueError("DOCX document body is missing")
+                archive.testzip()
         else:
             from PIL import Image
 
@@ -246,10 +269,6 @@ def upload_document(
     document_type = DOCUMENT_TYPE_ALIASES.get(document_type, document_type)
     if document_type not in DOCUMENT_TYPES:
         raise HTTPException(status_code=422, detail="Choose a supported document type")
-    extension = ALLOWED_DOCUMENT_TYPES.get(file.content_type or "")
-    if extension is None:
-        raise HTTPException(status_code=415, detail="Upload a PDF, JPEG, or PNG document")
-
     content = file.file.read(MAX_DOCUMENT_SIZE + 1)
     if not content:
         raise HTTPException(status_code=422, detail="The selected document is empty")
@@ -258,13 +277,17 @@ def upload_document(
 
     source_name = (file.filename or "document").replace("\\", "/").split("/")[-1]
     safe_name = re.sub(r"[\x00-\x1f\x7f]", "", source_name).strip()[:255] or "document"
+    media_type = detect_document_media_type(content, safe_name, file.content_type)
+    extension = ALLOWED_DOCUMENT_TYPES.get(media_type or "")
+    if extension is None:
+        raise HTTPException(status_code=415, detail="The file content does not match a supported PDF, JPEG, PNG, or DOCX document")
     storage_key = f"{application.application_number}/{uuid4().hex}{extension}"
     upload_root = Path(settings.upload_dir).resolve()
     file_path = (upload_root / storage_key).resolve()
     if not file_path.is_relative_to(upload_root):
         raise HTTPException(status_code=400, detail="Invalid document path")
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    check_file_signature(content, file.content_type or "")
+    check_file_signature(content, media_type)
     file_path.write_bytes(content)
 
     document = ApplicationDocument(
@@ -272,7 +295,7 @@ def upload_document(
         document_type=document_type,
         file_name=safe_name,
         storage_key=storage_key,
-        media_type=file.content_type or "application/octet-stream",
+        media_type=media_type,
         size_bytes=len(content),
         sha256=hashlib.sha256(content).hexdigest(),
     )
@@ -316,17 +339,18 @@ def replace_document(
     ))
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found")
-    extension = ALLOWED_DOCUMENT_TYPES.get(file.content_type or "")
-    if extension is None:
-        raise HTTPException(status_code=415, detail="Upload a PDF, JPEG, or PNG document")
     content = file.file.read(MAX_DOCUMENT_SIZE + 1)
     if not content:
         raise HTTPException(status_code=422, detail="The selected document is empty")
     if len(content) > MAX_DOCUMENT_SIZE:
         raise HTTPException(status_code=413, detail="Each document must be 15 MB or smaller")
-    check_file_signature(content, file.content_type or "")
     source_name = (file.filename or "document").replace("\\", "/").split("/")[-1]
     safe_name = re.sub(r"[\x00-\x1f\x7f]", "", source_name).strip()[:255] or "document"
+    media_type = detect_document_media_type(content, safe_name, file.content_type)
+    extension = ALLOWED_DOCUMENT_TYPES.get(media_type or "")
+    if extension is None:
+        raise HTTPException(status_code=415, detail="The file content does not match a supported PDF, JPEG, PNG, or DOCX document")
+    check_file_signature(content, media_type)
     root = Path(settings.upload_dir).resolve()
     old_path = (root / document.storage_key).resolve()
     storage_key = f"{application.application_number}/{uuid4().hex}{extension}"
@@ -338,7 +362,7 @@ def replace_document(
     try:
         document.file_name = safe_name
         document.storage_key = storage_key
-        document.media_type = file.content_type or "application/octet-stream"
+        document.media_type = media_type
         document.size_bytes = len(content)
         document.sha256 = hashlib.sha256(content).hexdigest()
         document.status = "PROCESSING"

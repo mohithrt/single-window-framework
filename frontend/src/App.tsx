@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import ApplicantDashboard from './ApplicantDashboard'
-import ApplicationWizard, { StartApplication } from './ApplicationWizard'
+import ApplicantDocumentsPage from './ApplicantDocumentsPage'
+import ApplicantApplicationsPage from './ApplicantApplicationsPage'
+import ApplicationWizard from './ApplicationWizard'
+import ApplicationEntryPage from './ApplicationEntryPage'
 import PrevalidationPage from './PrevalidationPage'
 import RiskAssessmentPage from './RiskAssessmentPage'
 import ApprovalStatusPage from './ApprovalStatusPage'
@@ -13,6 +16,9 @@ import AdminDashboardPage from './AdminDashboardPage'
 import MahaClearAssistantPage from './MahaClearAssistantPage'
 import { AdminApplicationPage, AdminAuditPage } from './AdminInspectionPages'
 import ApplicantFeesPage from './ApplicantFeesPage'
+import ApplicantPermissionsPage from './ApplicantPermissionsPage'
+import SystemHealthPage from './SystemHealthPage'
+import AssistantFab from './AssistantFab'
 
 type Role = 'APPLICANT' | 'OFFICER' | 'ADMIN'
 type User = { id: number; email: string; full_name: string; role: Role }
@@ -38,6 +44,32 @@ function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  async function demoLogin(role: 'APPLICANT' | 'OFFICER' | 'ADMIN') {
+    const demoAccounts = {
+      APPLICANT: 'applicant@demo.com',
+      OFFICER: 'officer@demo.com',
+      ADMIN: 'admin@demo.com',
+    } as const
+    setError('')
+    setBusy(true)
+    setEmail(demoAccounts[role])
+    setPassword('MahaClearDemo2026!')
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: demoAccounts[role], password: 'MahaClearDemo2026!' }),
+      })
+      if (!response.ok) throw new Error(await readError(response))
+      const result: AuthResult = await response.json()
+      localStorage.setItem('mahaclear_access_token', result.access_token)
+      redirect(dashboardFor[result.user.role])
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to start demo.')
+      setBusy(false)
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -69,7 +101,7 @@ function LoginPage() {
         <button className="primary-button full-width" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'} <span aria-hidden="true">→</span></button>
       </form>
       <p className="auth-switch">New to MAHACLEAR-AI? <a href="/register">Create an account</a></p>
-      <DemoCredentials />
+      <DemoCredentials onDemoLogin={demoLogin} busy={busy} />
     </AuthFrame>
   )
 }
@@ -133,16 +165,22 @@ function AuthFrame({ eyebrow, title, description, children }: { eyebrow: string;
   )
 }
 
-function DemoCredentials() {
+function DemoCredentials({ onDemoLogin, busy }: { onDemoLogin: (role: 'APPLICANT' | 'OFFICER' | 'ADMIN') => void; busy: boolean }) {
   return (
     <aside className="demo-box">
-      <strong>Demo accounts</strong>
-      <span>applicant@demo.com</span>
-      <span>officer@demo.com</span>
-      <span>admin@demo.com</span>
-      <small>Password: <code>MahaClearDemo2026!</code></small>
+      <div className="demo-heading"><strong>Instant demo access</strong><small>No registration required</small></div>
+      <div className="demo-actions">
+        <button type="button" onClick={() => onDemoLogin('APPLICANT')} disabled={busy}>Applicant demo <span>→</span></button>
+        <button type="button" onClick={() => onDemoLogin('OFFICER')} disabled={busy}>Officer demo <span>→</span></button>
+        <button type="button" onClick={() => onDemoLogin('ADMIN')} disabled={busy}>Admin demo <span>→</span></button>
+      </div>
+      <small className="demo-password">Demo password: <code>MahaClearDemo2026!</code></small>
     </aside>
   )
+}
+
+function WorkspacePage({ children, applicationId }: { children: ReactNode; applicationId?: number }) {
+  return <><>{children}</><AssistantFab applicationId={applicationId} /></>
 }
 
 function Brand() {
@@ -153,35 +191,39 @@ export default function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/'
   if (path === '/register') return <RegisterPage />
   if (path === '/login' || path === '/') return <LoginPage />
-  if (path === '/notifications') return <NotificationCenterPage />
-  if (path === '/applicant') return <ApplicantDashboard />
-  if (path === '/applicant/fees') return <ApplicantFeesPage />
-  if (path === '/applicant/applications/new') return <StartApplication />
+  if (path === '/notifications') return <WorkspacePage><NotificationCenterPage /></WorkspacePage>
+  if (path === '/applicant') return <WorkspacePage><ApplicantDashboard /></WorkspacePage>
+  if (path === '/applicant/documents') return <WorkspacePage><ApplicantDocumentsPage /></WorkspacePage>
+  if (path === '/applicant/applications') return <WorkspacePage><ApplicantApplicationsPage /></WorkspacePage>
+  if (path === '/applicant/permissions') return <WorkspacePage><ApplicantPermissionsPage /></WorkspacePage>
+  if (path === '/applicant/fees') return <WorkspacePage><ApplicantFeesPage /></WorkspacePage>
+  if (path === '/applicant/applications/new') return <WorkspacePage><ApplicationEntryPage /></WorkspacePage>
   const prevalidationRoute = path.match(/^\/applicant\/applications\/(\d+)\/prevalidation$/)
-  if (prevalidationRoute) return <PrevalidationPage applicationId={Number(prevalidationRoute[1])} />
+  if (prevalidationRoute) { const applicationId = Number(prevalidationRoute[1]); return <WorkspacePage applicationId={applicationId}><PrevalidationPage applicationId={applicationId} /></WorkspacePage> }
   const riskRoute = path.match(/^\/applicant\/applications\/(\d+)\/risk$/)
-  if (riskRoute) return <RiskAssessmentPage applicationId={Number(riskRoute[1])} />
+  if (riskRoute) { const applicationId = Number(riskRoute[1]); return <WorkspacePage applicationId={applicationId}><RiskAssessmentPage applicationId={applicationId} /></WorkspacePage> }
   const approvalsRoute = path.match(/^\/applicant\/applications\/(\d+)\/approvals$/)
-  if (approvalsRoute) return <ApprovalStatusPage applicationId={Number(approvalsRoute[1])} />
+  if (approvalsRoute) { const applicationId = Number(approvalsRoute[1]); return <WorkspacePage applicationId={applicationId}><ApprovalStatusPage applicationId={applicationId} /></WorkspacePage> }
   const criticalPathRoute = path.match(/^\/applicant\/applications\/(\d+)\/critical-path$/)
-  if (criticalPathRoute) return <CriticalPathPage applicationId={Number(criticalPathRoute[1])} />
+  if (criticalPathRoute) { const applicationId = Number(criticalPathRoute[1]); return <WorkspacePage applicationId={applicationId}><CriticalPathPage applicationId={applicationId} /></WorkspacePage> }
   const assistantRoute = path.match(/^\/applicant\/applications\/(\d+)\/assistant$/)
-  if (assistantRoute) return <MahaClearAssistantPage applicationId={Number(assistantRoute[1])} />
+  if (assistantRoute) return <WorkspacePage applicationId={Number(assistantRoute[1])}><MahaClearAssistantPage applicationId={Number(assistantRoute[1])} /></WorkspacePage>
   const activityRoute = path.match(/^\/applicant\/applications\/(\d+)\/activity$/)
-  if (activityRoute) return <ApplicationActivityPage applicationId={Number(activityRoute[1])} />
+  if (activityRoute) { const applicationId = Number(activityRoute[1]); return <WorkspacePage applicationId={applicationId}><ApplicationActivityPage applicationId={applicationId} /></WorkspacePage> }
   const applicationRoute = path.match(/^\/applicant\/applications\/(\d+)\/(edit|view)$/)
-  if (applicationRoute) return <ApplicationWizard applicationId={Number(applicationRoute[1])} readOnly={applicationRoute[2] === 'view'} />
+  if (applicationRoute) { const applicationId = Number(applicationRoute[1]); return <WorkspacePage applicationId={applicationId}><ApplicationWizard applicationId={applicationId} readOnly={applicationRoute[2] === 'view'} /></WorkspacePage> }
   const officerReviewRoute = path.match(/^\/officer\/approvals\/(\d+)$/)
-  if (officerReviewRoute) return <OfficerPortal view="review" approvalId={Number(officerReviewRoute[1])} />
+  if (officerReviewRoute) return <WorkspacePage><OfficerPortal view="review" approvalId={Number(officerReviewRoute[1])} /></WorkspacePage>
   const officerRoutes: Record<string, 'dashboard' | 'queue' | 'inspections' | 'joint-inspections' | 'documents' | 'escalations' | 'reports' | 'profile'> = {
     '/officer': 'dashboard', '/officer/queue': 'queue', '/officer/inspections': 'inspections',
     '/officer/joint-inspections': 'joint-inspections', '/officer/documents': 'documents',
     '/officer/escalations': 'escalations', '/officer/reports': 'reports', '/officer/profile': 'profile',
   }
-  if (officerRoutes[path]) return <OfficerPortal view={officerRoutes[path]} />
+  if (officerRoutes[path]) return <WorkspacePage><OfficerPortal view={officerRoutes[path]} /></WorkspacePage>
   const adminApplicationRoute = path.match(/^\/admin\/applications\/(\d+)$/)
-  if (adminApplicationRoute) return <AdminApplicationPage applicationId={Number(adminApplicationRoute[1])} />
-  if (path === '/admin/audit') return <AdminAuditPage />
-  if (path === '/admin') return <AdminDashboardPage />
+  if (adminApplicationRoute) return <WorkspacePage><AdminApplicationPage applicationId={Number(adminApplicationRoute[1])} /></WorkspacePage>
+  if (path === '/admin/audit') return <WorkspacePage><AdminAuditPage /></WorkspacePage>
+  if (path === '/admin/system-health') return <WorkspacePage><SystemHealthPage /></WorkspacePage>
+  if (path === '/admin') return <WorkspacePage><AdminDashboardPage /></WorkspacePage>
   return <LoginPage />
 }

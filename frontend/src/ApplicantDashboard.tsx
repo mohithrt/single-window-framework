@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ApplicationsResponse } from './applicationTypes'
-import { formatDate, statusLabel } from './applicationTypes'
+import { formatDate } from './applicationTypes'
 
 type ApplicantUser = { role: string }
 type DashboardApplication = {
@@ -85,15 +85,15 @@ export default function ApplicantDashboard() {
     <div className="applicant-shell">
       <header className="applicant-topbar">
         <a className="brand" href="/applicant"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a>
-        <nav className="applicant-top-nav" aria-label="Applicant navigation"><a className="active" href="/applicant">Dashboard</a><a href="#applications">Applications</a><a href="/applicant/fees">Fees</a><a href="/notifications">Notifications</a></nav>
-        <button className="applicant-signout" onClick={() => { localStorage.removeItem('mahaclear_access_token'); window.location.assign('/login') }}>Sign out <span>↗</span></button>
+        <div className="applicant-topbar-spacer" aria-hidden="true" />
+        <button className="applicant-signout" type="button" onClick={() => { localStorage.removeItem('mahaclear_access_token'); window.location.assign('/login') }}><span className="signout-icon" aria-hidden="true">↪</span><strong>Sign out</strong></button>
       </header>
       <aside className="applicant-sidebar">
         <div className="workspace-nav-label">APPLICANT WORKSPACE</div>
-        <a className="side-link selected" href="/applicant"><span>◫</span> Dashboard</a>
-        <a className="side-link" href="#applications"><span>▤</span> My applications</a>
-        <a className="side-link" href="/applicant/fees"><span>₹</span> Fee ledger</a>
-        <a className="side-link" href="/notifications"><span>◉</span> Notifications</a>
+        <a className="side-link" href="/applicant/documents"><span>▣</span> Documents</a>
+        <a className="side-link" href="/applicant/permissions"><span>◎</span> Permissions &amp; fees</a>
+        <a className="side-link" href="/notifications"><span>◉</span> Verification &amp; updates</a>
+        <a className="side-link" href="/applicant/applications"><span>▤</span> My applications</a>
         <div className="sidebar-note"><span className="sidebar-note-mark">✳</span><strong>One window.<br />Every approval.</strong><small>North-Star · SIH 2026</small></div>
         <div className="sidebar-bottom">MAHACLEAR-AI <span>·</span> APPLICANT</div>
       </aside>
@@ -133,29 +133,36 @@ export default function ApplicantDashboard() {
               <span><strong>{dashboard?.summary.total ?? 0}</strong> applications</span>
               <span><strong>{dashboard?.summary.unread_notifications ?? 0}</strong> unread updates</span>
               {focusApplication?.latest_update?.message && <span className="latest-update">Latest update: {focusApplication.latest_update.message}</span>}
+              <a className="context-link" href="/applicant/applications">Open full application register →</a>
             </div>
-            <section className="applications-panel" id="applications">
-              <div className="applications-panel-heading"><div><span className="card-kicker">YOUR APPLICATIONS</span><h2>Application register</h2></div><span className="application-count">{data?.applications.length ?? 0} RECORDS</span></div>
-              {(data?.applications.length ?? 0) === 0 ? <div className="empty-applications"><span className="empty-mark">＋</span><h3>Your application list is clear.</h3><p>Start an application to save a draft and track its progress here.</p><button className="primary-button" onClick={startApplication} disabled={creating}>Start an application <span>→</span></button></div> : (
-                <div className="application-table-wrap">
-                  <table className="application-table">
-                    <thead><tr><th>APPLICATION ID</th><th>COMPANY</th><th>INDUSTRY</th><th>RISK</th><th>OVERALL STATUS</th><th>PROGRESS</th><th>CURRENT DEPARTMENT</th><th>EXPECTED COMPLETION</th><th>ACTIONS</th></tr></thead>
-                    <tbody>{data?.applications.map((application) => {
-                      const isDraft = application.status === 'DRAFT'
-                      const href = isDraft ? `/applicant/applications/${application.id}/edit` : `/applicant/applications/${application.id}/view`
-                      return <tr key={application.id}>
-                        <td className="application-number">{application.application_number}</td>
-                        <td>{application.company_name || 'Company not entered'}</td>
-                        <td>{application.industry_type || 'Not selected'}</td>
-                        <td><span className={application.risk_tier ? 'officer-risk ' + application.risk_tier.toLowerCase() : 'not-assessed'}>{application.risk_tier || 'Not assessed'}</span></td>
-                        <td><StatusPill status={application.status} /></td>
-                        <td><div className="progress-cell"><div className="progress-track"><i style={{ width: `${application.progress_percent}%` }} /></div><span>{application.progress_percent}%</span></div></td>
-                        <td>{application.current_department_name || (isDraft ? 'Not assigned' : 'Awaiting assignment')}</td>
-                        <td>{formatDate(application.expected_completion_at)}</td>
-                        <td><a className="table-action" href={href}>{isDraft ? 'Edit draft' : 'View'} <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/risk`}>Risk assessment <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/approvals`}>Approvals <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/critical-path`}>Critical path <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/assistant`}>Ask MahaClear AI <span>→</span></a>{!isDraft && <a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/activity`}>Timeline & inspections <span>→</span></a>}</td>
-                      </tr>
-                    })}</tbody>
-                  </table>
+            <section className="dashboard-application-list">
+              <div className="dashboard-list-heading">
+                <div><span className="card-kicker">YOUR APPLICATIONS</span><h2>Application workspace</h2><p>Every application you have created, with its live workflow status.</p></div>
+                <span className="application-count">{data.applications.length} RECORDS</span>
+              </div>
+              {data.applications.length === 0 ? (
+                <div className="dashboard-empty"><h3>No applications yet</h3><p>Start a new application and it will appear here.</p></div>
+              ) : (
+                <div className="dashboard-application-cards">
+                  {data.applications.map(application => {
+                    const draft = application.status === 'DRAFT'
+                    const statusTone = application.status === 'APPROVED' ? 'approved' : application.status === 'REJECTED' ? 'rejected' : application.status === 'ACTION_REQUIRED' ? 'action' : application.status === 'IN_REVIEW' || application.status === 'SUBMITTED' ? 'pending' : 'draft'
+                    return (
+                      <article className="dashboard-application-card" key={application.id}>
+                        <div className="dashboard-application-main">
+                          <span className="application-number">{application.application_number}</span>
+                          <h3>{application.company_name || 'Company details pending'}</h3>
+                          <p><strong>Industry:</strong> {application.industry_type || 'Industry not specified'}</p>
+                        </div>
+                        <div className="dashboard-application-meta">
+                          <span className={`status-pill ${statusTone}`}><i />{application.status.replaceAll('_', ' ')}</span>
+                          <small>{application.current_department_name || (draft ? 'Draft stage' : 'Awaiting department assignment')}</small>
+                          <small>{application.progress_percent}% workflow complete</small>
+                        </div>
+                        <a className="dashboard-application-action" href={draft ? `/applicant/applications/${application.id}/edit` : `/applicant/applications/${application.id}/view`}>{draft ? 'Continue' : 'Open'} <span>→</span></a>
+                      </article>
+                    )
+                  })}
                 </div>
               )}
             </section>
@@ -167,7 +174,3 @@ export default function ApplicantDashboard() {
   )
 }
 
-function StatusPill({ status }: { status: string }) {
-  const tone = status === 'APPROVED' ? 'approved' : status === 'REJECTED' ? 'rejected' : status === 'ACTION_REQUIRED' ? 'action' : status === 'IN_REVIEW' ? 'in-review' : status === 'DRAFT' ? 'draft' : 'pending'
-  return <span className={`status-pill ${tone}`}><i />{statusLabel(status as Parameters<typeof statusLabel>[0])}</span>
-}

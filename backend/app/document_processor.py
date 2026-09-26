@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 import re
+import zipfile
+from html import unescape
 from typing import Protocol
 
 
@@ -39,6 +41,8 @@ class TesseractPyMuPDFProcessor:
                     text = "\n".join(page.get_text("text") for page in pages).strip()
                     if len(text) < 25:
                         text = self._ocr_pages(pages)
+            elif media_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+                text = self._docx_text(path)
             else:
                 from PIL import Image
                 import pytesseract
@@ -58,6 +62,22 @@ class TesseractPyMuPDFProcessor:
             warnings=warnings,
             readable=len(text.strip()) >= 8,
         )
+
+    @staticmethod
+    def _docx_text(path: str) -> str:
+        import xml.etree.ElementTree as ET
+        with zipfile.ZipFile(path) as archive:
+            xml = archive.read("word/document.xml")
+        root = ET.fromstring(xml)
+        parts = []
+        for node in root.iter():
+            if node.tag.endswith("}t") and node.text:
+                parts.append(unescape(node.text))
+            elif node.tag.endswith("}tab"):
+                parts.append("\\t")
+            elif node.tag.endswith("}br"):
+                parts.append("\\n")
+        return " ".join("".join(parts).split()).strip()
 
     @staticmethod
     def _ocr_pages(pages: list) -> str:
