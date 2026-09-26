@@ -903,3 +903,112 @@ body { font-size: 14px; }
   .assistant-fab-panel { right: 16px; bottom: 86px; }
   .demo-actions { grid-template-columns: 1fr; }
 }
+
+/* Production UI refresh: brighter government-tech palette + integrated AI assistant */
+:root {
+  --navy: #082f49;
+  --blue: #0b6eaa;
+  --blue-bright: #168bd0;
+  --teal: #0f9f9a;
+  --green: #16803c;
+  --orange: #f59e0b;
+  --red: #d94841;
+  --ink: #17324d;
+  --muted: #60788b;
+  --line: #d7e5ee;
+  --surface: #ffffff;
+  --soft-blue: #eef7fd;
+  --soft-teal: #edfafa;
+}
+body { color: var(--ink); background: #f4f8fb; }
+h1,h2,h3,strong { color: var(--ink); }
+.primary-button, .new-application-button, .officer-button.primary {
+  background: linear-gradient(135deg, #0b6eaa, #0f8fc4);
+  border-color: #0b6eaa;
+  box-shadow: 0 6px 16px rgba(11,110,170,.18);
+  font-weight: 800;
+}
+.primary-button:hover, .new-application-button:hover, .officer-button.primary:hover {
+  background: linear-gradient(135deg, #075985, #087da9);
+  transform: translateY(-1px);
+}
+.applicant-heading h1, .officer-heading h1, .admin-heading h1 { font-weight: 850; letter-spacing: -.035em; }
+.applicant-heading p, .officer-heading p, .admin-heading p { color: #5b7284; }
+.application-stat, .officer-metric, .admin-kpis article, .workspace-card, .admin-chart-panel, .admin-panel {
+  border-color: var(--line);
+  box-shadow: 0 8px 24px rgba(18,58,84,.07);
+}
+.application-stat strong, .officer-metric strong, .admin-kpis strong { color: #075985; font-weight: 850; }
+.applicant-topbar, .officer-topbar { background: #fff; border-bottom-color: #dce8ef; }
+.applicant-top-nav a.active, .applicant-top-nav a:hover, .side-link.active, .side-link:hover {
+  color: #075985;
+  background: #eaf6fd;
+}
+.status-chip, .risk-chip { font-weight: 800; }
+.workspace-card:hover, .application-stat:hover, .officer-metric:hover {
+  border-color: #a9d5ec;
+  box-shadow: 0 12px 28px rgba(11,110,170,.12);
+  transform: translateY(-2px);
+}
+.upload-dropzone { border-color: #9bc9df; background: #f4fbff; }
+.upload-dropzone.drag-active { border-color: var(--blue-bright); background: #e9f7ff; }
+.assistant-fab {
+  width: 62px; height: 62px; right: 22px; bottom: 22px;
+  border: 3px solid #fff; border-radius: 18px;
+  color: #fff;
+  background: linear-gradient(145deg, #0b6eaa, #12a6a0);
+  box-shadow: 0 10px 30px rgba(8,47,73,.28), 0 0 0 5px rgba(22,139,208,.10);
+  transition: transform .18s ease, box-shadow .18s ease, border-radius .18s ease;
+}
+.assistant-fab:hover, .assistant-fab.open {
+  background: linear-gradient(145deg, #075985, #0f8f89);
+  transform: translateY(-2px) scale(1.03);
+  border-radius: 20px;
+  box-shadow: 0 14px 34px rgba(8,47,73,.32), 0 0 0 6px rgba(15,159,154,.13);
+}
+.assistant-fab span { font-size: 22px; }
+.assistant-fab b { font-size: 9px; letter-spacing: .08em; }
+.assistant-fab-panel {
+  right: 22px; bottom: 96px; width: min(390px, calc(100vw - 28px));
+  height: min(560px, calc(100vh - 118px));
+  border: 1px solid #cfe1eb; border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(8,47,73,.24), 0 8px 24px rgba(8,47,73,.10);
+}
+.assistant-fab-panel > header {
+  padding: 17px 18px;
+  background: linear-gradient(135deg, #082f49 0%, #0b6eaa 65%, #0f9f9a 100%);
+}
+.assistant-fab-panel > header strong { font-size: 16px; font-weight: 850; color: #fff; }
+.assistant-fab-panel > header small { color: #d5edf8; }
+.assistant-fab-messages { padding: 16px; background: linear-gradient(180deg,#f2f8fb,#f8fbfd); }
+.assistant-fab-message {
+  padding: 11px 13px; border-radius: 13px; border-color: #d8e7ef;
+  box-shadow: 0 2px 8px rgba(18,58,84,.05);
+}
+.assistant-fab-message.user {
+  background: linear-gradient(135deg,#0b6eaa,#168bd0);
+  border-color: #0b6eaa;
+  font-weight: 650;
+}
+.assistant-fab-suggestions { padding: 10px 12px; background: #fff; }
+.assistant-fab-suggestions button {
+  border-color: #b9d9e8; background: #eff9fd; color: #075985; font-weight: 700;
+}
+.assistant-fab-suggestions button:hover { background: #dff2fa; border-color: #79bcd8; }
+.assistant-fab-panel form { background: #fff; }
+.assistant-fab-panel form input {
+  border-color: #b9d4e2; border-radius: 10px; background: #f9fcfe;
+}
+.assistant-fab-panel form input:focus {
+  border-color: #168bd0; box-shadow: 0 0 0 3px rgba(22,139,208,.12);
+}
+.assistant-fab-panel form button {
+  width: 48px; border-radius: 10px;
+  background: linear-gradient(135deg,#0b6eaa,#0f9f9a);
+  font-weight: 800;
+}
+@media (max-width: 640px) {
+  .assistant-fab { right: 16px; bottom: 16px; }
+  .assistant-fab-panel { right: 14px; bottom: 88px; width: calc(100vw - 28px); }
+}
