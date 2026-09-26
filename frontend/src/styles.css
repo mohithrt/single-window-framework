@@ -50,10 +50,17 @@ a { color: var(--green); }
 .auth-switch { margin: 22px 0 0; color: #7c8982; font-size: 11px; text-align: center; }
 .auth-switch a { margin-left: 3px; color: var(--green); font-weight: 600; text-decoration: none; }
 .auth-switch a:hover { text-decoration: underline; }
-.demo-box { display: grid; gap: 6px; margin-top: 29px; padding: 15px 16px; border: 1px solid #dfe8e2; border-radius: 5px; background: #f1f6fa; color: #728078; font-size: 11px; }
-.demo-box strong { margin-bottom: 2px; color: #33485c; font-size: 11px; }
-.demo-box small { margin-top: 4px; color: #53675a; font-size: 11px; letter-spacing: .02em; }
-.demo-box code { color: #315b78; font: 11px 'DM Mono', monospace; }
+.demo-box { display: grid; gap: 9px; margin-top: 29px; padding: 15px 16px; border: 1px solid #dfe8e2; border-radius: 5px; background: #f1f6fa; color: #728078; font-size: 11px; }
+.demo-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.demo-heading strong { color: #33485c; font-size: 11px; }
+.demo-heading small { margin: 0; color: #8798a8; font-size: 10px; }
+.demo-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.demo-actions button { min-height: 34px; padding: 0 9px; border: 1px solid #d5e2ea; border-radius: 4px; background: #fff; color: #315b78; font-size: 10px; font-weight: 600; cursor: pointer; }
+.demo-actions button:hover:not(:disabled) { border-color: #8eb4cb; background: #f8fbfd; }
+.demo-actions button:disabled { cursor: wait; opacity: .55; }
+.demo-actions button span { margin-left: 3px; }
+.demo-password { margin-top: 2px; color: #53675a; font: 10px 'DM Mono', monospace; letter-spacing: .01em; }
+.demo-box code { color: #315b78; font: 10px 'DM Mono', monospace; }
 .success-panel { margin-top: 27px; padding: 20px; border: 1px solid #d6e7f2; border-radius: 5px; background: #f2f7fa; }
 .success-mark { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #dcecf7; color: var(--green); }
 .success-panel p { color: #617786; font-size: 12px; }
