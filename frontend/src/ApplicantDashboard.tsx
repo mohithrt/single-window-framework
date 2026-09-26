@@ -166,8 +166,7 @@ export default function ApplicantDashboard() {
                 </div>
               )}
             </section>
-            </>
-                    </>
+          </>
         )}
       </main>
       <footer className="workspace-footer"><span>MAHACLEAR-AI <span>· Faster, Smarter Industrial Approvals</span></span><span>TEAM NORTH-STAR <i>·</i> SIH 2026</span></footer>
