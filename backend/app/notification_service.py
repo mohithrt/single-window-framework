@@ -8,7 +8,7 @@ from app.notification_delivery import NotificationDelivery
 
 
 def notify_users(db: Session, user_ids: set[int], application_id: int | None,
-                 notification_type: str, message: str) -> list[Notification]:
+                 notification_type: str, message: str, delivery_phone: str | None = None) -> list[Notification]:
     if not user_ids:
         return []
     rows = [Notification(
@@ -24,7 +24,7 @@ def notify_users(db: Session, user_ids: set[int], application_id: int | None,
         try:
             delivery.deliver(
                 email=user.email,
-                phone=None,
+                phone=delivery_phone,
                 subject=f"MahaClear: {notification_type.replace('_', ' ').title()}",
                 message=message,
                 metadata={"application_id": application_id, "notification_type": notification_type},
@@ -35,7 +35,7 @@ def notify_users(db: Session, user_ids: set[int], application_id: int | None,
 
 
 def notify_applicant(db: Session, application: Application, notification_type: str, message: str) -> list[Notification]:
-    return notify_users(db, {application.owner_user_id}, application.id, notification_type, message)
+    return notify_users(db, {application.owner_user_id}, application.id, notification_type, message, application.applicant_phone)
 
 
 def notify_staff(db: Session, application: Application, notification_type: str,
