@@ -15,6 +15,7 @@ from app.database import get_db
 from app.dependencies import require_roles
 from app.integration_service import provider_catalog
 from app.models import RoleCode
+from app.queue_service import QueueService
 
 router = APIRouter(prefix="/system", tags=["system health"], dependencies=[Depends(require_roles(RoleCode.ADMIN))])
 Database = Annotated[Session, Depends(get_db)]
@@ -30,6 +31,7 @@ def system_health(db: Database) -> dict:
         checks["database"] = {"status": "error", "error": type(exc).__name__}
 
     checks["cache"] = CacheService().health()
+    checks["queue"] = QueueService().health()
     checks["ocr"] = {
         "status": "ok" if shutil.which("tesseract") else "unavailable",
         "tesseract_installed": bool(shutil.which("tesseract")),
