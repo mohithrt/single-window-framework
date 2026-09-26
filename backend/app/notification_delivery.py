@@ -14,13 +14,14 @@ from email.message import EmailMessage
 from typing import Any
 
 from app.core.config import settings
+from app.queue_service import QueueService
 
 
 class NotificationDelivery:
     def __init__(self) -> None:
         self.mode = settings.notification_mode
 
-    def deliver(
+    def deliver_now(
         self,
         *,
         email: str | None,
@@ -37,6 +38,25 @@ class NotificationDelivery:
         if not results:
             results.append({"channel": "mock", "status": "SKIPPED", "reason": "external delivery not configured"})
         return results
+
+    def deliver(
+        self,
+        *,
+        email: str | None,
+        phone: str | None,
+        subject: str,
+        message: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        if self.mode in {"smtp", "all", "webhook"} and QueueService().redis is not None:
+            QueueService().enqueue("notifications", {
+                "email": email, "phone": phone, "subject": subject,
+                "message": message, "metadata": metadata or {},
+            })
+            return [{"channel": "queue", "status": "QUEUED", "queue": "notifications"}]
+        return self.deliver_now(
+            email=email, phone=phone, subject=subject, message=message, metadata=metadata,
+        )
 
     def _email(self, recipient: str, subject: str, message: str) -> dict[str, Any]:
         try:
