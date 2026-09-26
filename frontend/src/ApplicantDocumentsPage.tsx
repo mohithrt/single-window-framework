@@ -100,7 +100,7 @@ export default function ApplicantDocumentsPage() {
       const url = URL.createObjectURL(blob)
       const opened = window.open(url, '_blank', 'noopener,noreferrer')
       if (!opened) {
-        const link = document.createElement('a')
+        const link = window.document.createElement('a')
         link.href = url
         link.download = document.file_name
         link.click()
