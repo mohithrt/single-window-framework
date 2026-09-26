@@ -256,7 +256,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  async function processFiles(files: File[]) {
+  async function processFiles(files: File[], uploadType = documentType) {
     if (!files.length) return
     setError('')
     setBusy(true)
@@ -266,7 +266,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
         if (file.size > 15 * 1024 * 1024) throw new Error(`${file.name} exceeds the 15 MB limit.`)
         if (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type)) throw new Error(`${file.name}: choose a PDF, JPG, or PNG file.`)
         const body = new FormData()
-        body.append('document_type', documentType)
+        body.append('document_type', uploadType)
         body.append('file', file)
         const document: ApplicationDocument = await new Promise((resolve, reject) => {
           const request = new XMLHttpRequest()
@@ -305,6 +305,28 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
     event.preventDefault()
     setDragActive(false)
     if (!busy) void processFiles(Array.from(event.dataTransfer.files))
+  }
+
+  async function replaceDocument(document: ApplicationDocument) {
+    if (isReadOnly || busy) return
+    const input = window.document.createElement('input')
+    input.type = 'file'
+    input.accept = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png'
+    input.multiple = false
+    input.onchange = () => {
+      const files = Array.from(input.files ?? [])
+      if (!files.length) return
+      void (async () => {
+        try {
+          await processFiles(files, document.document_type)
+          await removeDocument(document.id)
+          setSaveState('Document replaced')
+        } catch {
+          // processFiles already reports upload errors
+        }
+      })()
+    }
+    input.click()
   }
 
   async function removeDocument(documentId: number) {
@@ -434,7 +456,7 @@ export default function ApplicationWizard({ applicationId, readOnly }: Props) {
               {!isReadOnly && <div className="upload-row"><Field label="Document type"><select value={documentType} onChange={(event) => setDocumentType(event.target.value)}>{DOCUMENT_TYPES.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></Field><div className={`upload-dropzone ${dragActive ? 'drag-active' : ''} ${busy ? 'disabled' : ''}`} onDragOver={(event) => { event.preventDefault(); if (!busy) setDragActive(true) }} onDragLeave={() => setDragActive(false)} onDrop={onDropFiles}><strong>{dragActive ? 'Drop documents here' : 'Drag & drop documents here'}</strong><span>or choose multiple PDF, JPG or PNG files · up to 15 MB each</span><label className="upload-button">Choose files<input type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" multiple disabled={busy} onChange={(event) => void uploadFiles(event)} /></label></div></div>}
               {uploadPercent !== null && <div className="upload-progress-panel"><div><strong>Uploading document</strong><span>{uploadPercent}%</span></div><progress max="100" value={uploadPercent} /></div>}
               {fieldErrors.documents && <p className="field-error">{fieldErrors.documents}</p>}
-              {uploaded.length === 0 ? <div className="no-documents">No documents uploaded yet.</div> : <ul className="document-list">{uploaded.map((document) => <li key={document.id}><span className="file-mark">FILE</span><span className="document-name"><strong>{document.file_name}</strong><small>{documentLabel(document.document_type)} · {formatBytes(document.size_bytes)} · {document.status}</small></span><a href={`/api/applications/${applicationId}/documents/${document.id}/download`} onClick={(event) => { event.preventDefault(); void downloadDocument(applicationId, document.id) }}>Download</a>{!isReadOnly && <button type="button" aria-label={`Remove ${document.file_name}`} onClick={() => void removeDocument(document.id)}>Remove</button>}</li>)}</ul>}
+              {uploaded.length === 0 ? <div className="no-documents">No documents uploaded yet.</div> : <ul className="document-list">{uploaded.map((document) => <li key={document.id}><span className="file-mark">FILE</span><span className="document-name"><strong>{document.file_name}</strong><small>{documentLabel(document.document_type)} · {formatBytes(document.size_bytes)} · {document.status}</small></span><a href={`/api/applications/${applicationId}/documents/${document.id}/download`} onClick={(event) => { event.preventDefault(); void downloadDocument(applicationId, document.id) }}>View</a>{!isReadOnly && <><button type="button" aria-label={`Replace ${document.file_name}`} onClick={() => replaceDocument(document)}>Replace</button><button type="button" aria-label={`Remove ${document.file_name}`} onClick={() => void removeDocument(document.id)}>Remove</button></>}</li>)}</ul>}
               {!isReadOnly && <button className="secondary-button" type="button" onClick={() => void openPrevalidation()} disabled={busy}>Run document pre-validation →</button>}
             </>}
             {step === 6 && <><Review values={values} application={application} documents={uploaded} /><a className="risk-review-link" href={`/applicant/applications/${applicationId}/risk`}>Open transparent risk assessment <span>→</span></a></>}
