@@ -4,7 +4,7 @@ import { DOCUMENT_TYPES } from './applicationTypes'
 
 async function createDraft(): Promise<number> {
   const token = localStorage.getItem('mahaclear_access_token')
-  if (!token) { window.location.assign('/login'); return }
+  if (!token) { window.location.assign('/login'); throw new Error('Authentication required.') }
   const response = await fetch('/api/applications', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
@@ -22,7 +22,7 @@ export default function ApplicationEntryPage() {
   const [error, setError] = useState('')
   const [dragActive, setDragActive] = useState(false)
   const [files, setFiles] = useState<File[]>([])
-  const [documentType, setDocumentType] = useState(DOCUMENT_TYPES[0][0])
+  const [documentType, setDocumentType] = useState<string>(DOCUMENT_TYPES[0][0])
   const [uploadPercent, setUploadPercent] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
