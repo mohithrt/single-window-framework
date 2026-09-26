@@ -13,6 +13,7 @@ import AdminDashboardPage from './AdminDashboardPage'
 import MahaClearAssistantPage from './MahaClearAssistantPage'
 import { AdminApplicationPage, AdminAuditPage } from './AdminInspectionPages'
 import ApplicantFeesPage from './ApplicantFeesPage'
+import SystemHealthPage from './SystemHealthPage'
 
 type Role = 'APPLICANT' | 'OFFICER' | 'ADMIN'
 type User = { id: number; email: string; full_name: string; role: Role }
@@ -182,6 +183,7 @@ export default function App() {
   const adminApplicationRoute = path.match(/^\/admin\/applications\/(\d+)$/)
   if (adminApplicationRoute) return <AdminApplicationPage applicationId={Number(adminApplicationRoute[1])} />
   if (path === '/admin/audit') return <AdminAuditPage />
+  if (path === '/admin/system-health') return <SystemHealthPage />
   if (path === '/admin') return <AdminDashboardPage />
   return <LoginPage />
 }
