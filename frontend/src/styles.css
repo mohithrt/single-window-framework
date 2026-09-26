@@ -849,3 +849,12 @@ button, a, input, select, textarea, summary { -webkit-tap-highlight-color: trans
 .admin-data-stamp, .admin-chart-panel header p, .admin-bar-row > span, .admin-bar-row b { font-size: 11px; }
 .admin-event-list strong, .admin-event-list p, .admin-event-list time, .admin-event-list small { font-size: 11px; }
 .admin-kpis strong { font-size: 26px; }
+
+
+/* Accessible government-style document drop zone */
+.upload-dropzone { min-height: 116px; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 18px; border: 1px dashed #a9bdcc; border-radius: 6px; background: #f7fafc; text-align: center; transition: border-color .15s, background .15s, box-shadow .15s; }
+.upload-dropzone strong { color: #29465d; font: 600 12px Manrope, sans-serif; }
+.upload-dropzone span { color: #7b8d9b; font-size: 10px; }
+.upload-dropzone.drag-active { border-color: #005a9c; background: #eef6fb; box-shadow: 0 0 0 3px rgba(0,90,156,.08); }
+.upload-dropzone.disabled { opacity: .6; pointer-events: none; }
+.upload-dropzone .upload-button { margin-top: 4px; }
