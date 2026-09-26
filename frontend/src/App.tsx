@@ -175,6 +175,10 @@ function DemoCredentials({ onDemoLogin, busy }: { onDemoLogin: (role: 'APPLICANT
   )
 }
 
+function WorkspacePage({ children, applicationId }: { children: ReactNode; applicationId?: number }) {
+  return <><>{children}</><AssistantFab applicationId={applicationId} /></>
+}
+
 function Brand() {
   return <a className="brand" href="/login"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a>
 }
@@ -183,36 +187,36 @@ export default function App() {
   const path = window.location.pathname.replace(/\/$/, '') || '/'
   if (path === '/register') return <RegisterPage />
   if (path === '/login' || path === '/') return <LoginPage />
-  if (path === '/notifications') return <NotificationCenterPage />
-  if (path === '/applicant') return <ApplicantDashboard />
-  if (path === '/applicant/fees') return <ApplicantFeesPage />
-  if (path === '/applicant/applications/new') return <StartApplication />
+  if (path === '/notifications') return <WorkspacePage><NotificationCenterPage /></WorkspacePage>
+  if (path === '/applicant') return <WorkspacePage><ApplicantDashboard /></WorkspacePage>
+  if (path === '/applicant/fees') return <WorkspacePage><ApplicantFeesPage /></WorkspacePage>
+  if (path === '/applicant/applications/new') return <WorkspacePage><StartApplication /></WorkspacePage>
   const prevalidationRoute = path.match(/^\/applicant\/applications\/(\d+)\/prevalidation$/)
-  if (prevalidationRoute) { const applicationId = Number(prevalidationRoute[1]); return <><PrevalidationPage applicationId={applicationId} /><AssistantFab applicationId={applicationId} /></> }
+  if (prevalidationRoute) { const applicationId = Number(prevalidationRoute[1]); return <WorkspacePage applicationId={applicationId}><PrevalidationPage applicationId={applicationId} /></WorkspacePage> }
   const riskRoute = path.match(/^\/applicant\/applications\/(\d+)\/risk$/)
-  if (riskRoute) { const applicationId = Number(riskRoute[1]); return <><RiskAssessmentPage applicationId={applicationId} /><AssistantFab applicationId={applicationId} /></> }
+  if (riskRoute) { const applicationId = Number(riskRoute[1]); return <WorkspacePage applicationId={applicationId}><RiskAssessmentPage applicationId={applicationId} /></WorkspacePage> }
   const approvalsRoute = path.match(/^\/applicant\/applications\/(\d+)\/approvals$/)
-  if (approvalsRoute) { const applicationId = Number(approvalsRoute[1]); return <><ApprovalStatusPage applicationId={applicationId} /><AssistantFab applicationId={applicationId} /></> }
+  if (approvalsRoute) { const applicationId = Number(approvalsRoute[1]); return <WorkspacePage applicationId={applicationId}><ApprovalStatusPage applicationId={applicationId} /></WorkspacePage> }
   const criticalPathRoute = path.match(/^\/applicant\/applications\/(\d+)\/critical-path$/)
-  if (criticalPathRoute) { const applicationId = Number(criticalPathRoute[1]); return <><CriticalPathPage applicationId={applicationId} /><AssistantFab applicationId={applicationId} /></> }
+  if (criticalPathRoute) { const applicationId = Number(criticalPathRoute[1]); return <WorkspacePage applicationId={applicationId}><CriticalPathPage applicationId={applicationId} /></WorkspacePage> }
   const assistantRoute = path.match(/^\/applicant\/applications\/(\d+)\/assistant$/)
-  if (assistantRoute) return <MahaClearAssistantPage applicationId={Number(assistantRoute[1])} />
+  if (assistantRoute) return <WorkspacePage applicationId={Number(assistantRoute[1])}><MahaClearAssistantPage applicationId={Number(assistantRoute[1])} /></WorkspacePage>
   const activityRoute = path.match(/^\/applicant\/applications\/(\d+)\/activity$/)
-  if (activityRoute) { const applicationId = Number(activityRoute[1]); return <><ApplicationActivityPage applicationId={applicationId} /><AssistantFab applicationId={applicationId} /></> }
+  if (activityRoute) { const applicationId = Number(activityRoute[1]); return <WorkspacePage applicationId={applicationId}><ApplicationActivityPage applicationId={applicationId} /></WorkspacePage> }
   const applicationRoute = path.match(/^\/applicant\/applications\/(\d+)\/(edit|view)$/)
-  if (applicationRoute) { const applicationId = Number(applicationRoute[1]); return <><ApplicationWizard applicationId={applicationId} readOnly={applicationRoute[2] === 'view'} /><AssistantFab applicationId={applicationId} /></> }
+  if (applicationRoute) { const applicationId = Number(applicationRoute[1]); return <WorkspacePage applicationId={applicationId}><ApplicationWizard applicationId={applicationId} readOnly={applicationRoute[2] === 'view'} /></WorkspacePage> }
   const officerReviewRoute = path.match(/^\/officer\/approvals\/(\d+)$/)
-  if (officerReviewRoute) return <OfficerPortal view="review" approvalId={Number(officerReviewRoute[1])} />
+  if (officerReviewRoute) return <WorkspacePage><OfficerPortal view="review" approvalId={Number(officerReviewRoute[1])} /></WorkspacePage>
   const officerRoutes: Record<string, 'dashboard' | 'queue' | 'inspections' | 'joint-inspections' | 'documents' | 'escalations' | 'reports' | 'profile'> = {
     '/officer': 'dashboard', '/officer/queue': 'queue', '/officer/inspections': 'inspections',
     '/officer/joint-inspections': 'joint-inspections', '/officer/documents': 'documents',
     '/officer/escalations': 'escalations', '/officer/reports': 'reports', '/officer/profile': 'profile',
   }
-  if (officerRoutes[path]) return <OfficerPortal view={officerRoutes[path]} />
+  if (officerRoutes[path]) return <WorkspacePage><OfficerPortal view={officerRoutes[path]} /></WorkspacePage>
   const adminApplicationRoute = path.match(/^\/admin\/applications\/(\d+)$/)
-  if (adminApplicationRoute) return <AdminApplicationPage applicationId={Number(adminApplicationRoute[1])} />
-  if (path === '/admin/audit') return <AdminAuditPage />
-  if (path === '/admin/system-health') return <SystemHealthPage />
-  if (path === '/admin') return <AdminDashboardPage />
+  if (adminApplicationRoute) return <WorkspacePage><AdminApplicationPage applicationId={Number(adminApplicationRoute[1])} /></WorkspacePage>
+  if (path === '/admin/audit') return <WorkspacePage><AdminAuditPage /></WorkspacePage>
+  if (path === '/admin/system-health') return <WorkspacePage><SystemHealthPage /></WorkspacePage>
+  if (path === '/admin') return <WorkspacePage><AdminDashboardPage /></WorkspacePage>
   return <LoginPage />
 }
