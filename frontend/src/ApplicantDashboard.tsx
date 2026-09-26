@@ -91,9 +91,9 @@ export default function ApplicantDashboard() {
       <aside className="applicant-sidebar">
         <div className="workspace-nav-label">APPLICANT WORKSPACE</div>
         <a className="side-link selected" href="/applicant"><span>◫</span> Dashboard</a>
-        <a className="side-link" href="#applications"><span>▤</span> My applications</a>
+        <a className="side-link" href="/applicant/applications"><span>▤</span> My applications</a>
         <a className="side-link" href="/applicant/fees"><span>₹</span> Fee ledger</a>
-        <a className="side-link" href="/notifications"><span>◉</span> Notifications</a>
+        <a className="side-link" href="/applicant?notifications=1"><span>◉</span> Notifications</a>
         <div className="sidebar-note"><span className="sidebar-note-mark">✳</span><strong>One window.<br />Every approval.</strong><small>North-Star · SIH 2026</small></div>
         <div className="sidebar-bottom">MAHACLEAR-AI <span>·</span> APPLICANT</div>
       </aside>
@@ -133,33 +133,9 @@ export default function ApplicantDashboard() {
               <span><strong>{dashboard?.summary.total ?? 0}</strong> applications</span>
               <span><strong>{dashboard?.summary.unread_notifications ?? 0}</strong> unread updates</span>
               {focusApplication?.latest_update?.message && <span className="latest-update">Latest update: {focusApplication.latest_update.message}</span>}
+              <a className="context-link" href="/applicant/applications">Open full application register →</a>
             </div>
-            <section className="applications-panel" id="applications">
-              <div className="applications-panel-heading"><div><span className="card-kicker">YOUR APPLICATIONS</span><h2>Application register</h2></div><span className="application-count">{data?.applications.length ?? 0} RECORDS</span></div>
-              {(data?.applications.length ?? 0) === 0 ? <div className="empty-applications"><span className="empty-mark">＋</span><h3>Your application list is clear.</h3><p>Start an application to save a draft and track its progress here.</p><button className="primary-button" onClick={startApplication} disabled={creating}>Start an application <span>→</span></button></div> : (
-                <div className="application-table-wrap">
-                  <table className="application-table">
-                    <thead><tr><th>APPLICATION ID</th><th>COMPANY</th><th>INDUSTRY</th><th>RISK</th><th>OVERALL STATUS</th><th>PROGRESS</th><th>CURRENT DEPARTMENT</th><th>EXPECTED COMPLETION</th><th>ACTIONS</th></tr></thead>
-                    <tbody>{data?.applications.map((application) => {
-                      const isDraft = application.status === 'DRAFT'
-                      const href = isDraft ? `/applicant/applications/${application.id}/edit` : `/applicant/applications/${application.id}/view`
-                      return <tr key={application.id}>
-                        <td className="application-number">{application.application_number}</td>
-                        <td>{application.company_name || 'Company not entered'}</td>
-                        <td>{application.industry_type || 'Not selected'}</td>
-                        <td><span className={application.risk_tier ? 'officer-risk ' + application.risk_tier.toLowerCase() : 'not-assessed'}>{application.risk_tier || 'Not assessed'}</span></td>
-                        <td><StatusPill status={application.status} /></td>
-                        <td><div className="progress-cell"><div className="progress-track"><i style={{ width: `${application.progress_percent}%` }} /></div><span>{application.progress_percent}%</span></div></td>
-                        <td>{application.current_department_name || (isDraft ? 'Not assigned' : 'Awaiting assignment')}</td>
-                        <td>{formatDate(application.expected_completion_at)}</td>
-                        <td><a className="table-action" href={href}>{isDraft ? 'Edit draft' : 'View'} <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/risk`}>Risk assessment <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/approvals`}>Approvals <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/critical-path`}>Critical path <span>→</span></a><a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/assistant`}>Ask MahaClear AI <span>→</span></a>{!isDraft && <a className="table-action risk-table-action" href={`/applicant/applications/${application.id}/activity`}>Timeline & inspections <span>→</span></a>}</td>
-                      </tr>
-                    })}</tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          </>
+                    </>
         )}
       </main>
       <footer className="workspace-footer"><span>MAHACLEAR-AI <span>· Faster, Smarter Industrial Approvals</span></span><span>TEAM NORTH-STAR <i>·</i> SIH 2026</span></footer>
