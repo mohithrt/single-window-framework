@@ -40,6 +40,32 @@ function LoginPage() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
+  async function demoLogin(role: 'APPLICANT' | 'OFFICER' | 'ADMIN') {
+    const demoAccounts = {
+      APPLICANT: 'applicant@demo.com',
+      OFFICER: 'officer@demo.com',
+      ADMIN: 'admin@demo.com',
+    } as const
+    setError('')
+    setBusy(true)
+    setEmail(demoAccounts[role])
+    setPassword('MahaClearDemo2026!')
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: demoAccounts[role], password: 'MahaClearDemo2026!' }),
+      })
+      if (!response.ok) throw new Error(await readError(response))
+      const result: AuthResult = await response.json()
+      localStorage.setItem('mahaclear_access_token', result.access_token)
+      redirect(dashboardFor[result.user.role])
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to start demo.')
+      setBusy(false)
+    }
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
@@ -70,7 +96,7 @@ function LoginPage() {
         <button className="primary-button full-width" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'} <span aria-hidden="true">→</span></button>
       </form>
       <p className="auth-switch">New to MAHACLEAR-AI? <a href="/register">Create an account</a></p>
-      <DemoCredentials />
+      <DemoCredentials onDemoLogin={demoLogin} busy={busy} />
     </AuthFrame>
   )
 }
@@ -134,14 +160,16 @@ function AuthFrame({ eyebrow, title, description, children }: { eyebrow: string;
   )
 }
 
-function DemoCredentials() {
+function DemoCredentials({ onDemoLogin, busy }: { onDemoLogin: (role: 'APPLICANT' | 'OFFICER' | 'ADMIN') => void; busy: boolean }) {
   return (
     <aside className="demo-box">
-      <strong>Demo accounts</strong>
-      <span>applicant@demo.com</span>
-      <span>officer@demo.com</span>
-      <span>admin@demo.com</span>
-      <small>Password: <code>MahaClearDemo2026!</code></small>
+      <div className="demo-heading"><strong>Instant demo access</strong><small>No registration required</small></div>
+      <div className="demo-actions">
+        <button type="button" onClick={() => onDemoLogin('APPLICANT')} disabled={busy}>Applicant demo <span>→</span></button>
+        <button type="button" onClick={() => onDemoLogin('OFFICER')} disabled={busy}>Officer demo <span>→</span></button>
+        <button type="button" onClick={() => onDemoLogin('ADMIN')} disabled={busy}>Admin demo <span>→</span></button>
+      </div>
+      <small className="demo-password">Demo password: <code>MahaClearDemo2026!</code></small>
     </aside>
   )
 }
