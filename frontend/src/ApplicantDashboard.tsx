@@ -135,6 +135,38 @@ export default function ApplicantDashboard() {
               {focusApplication?.latest_update?.message && <span className="latest-update">Latest update: {focusApplication.latest_update.message}</span>}
               <a className="context-link" href="/applicant/applications">Open full application register →</a>
             </div>
+            <section className="dashboard-application-list">
+              <div className="dashboard-list-heading">
+                <div><span className="card-kicker">YOUR APPLICATIONS</span><h2>Application workspace</h2><p>Every application you have created, with its live workflow status.</p></div>
+                <span className="application-count">{data.applications.length} RECORDS</span>
+              </div>
+              {data.applications.length === 0 ? (
+                <div className="dashboard-empty"><h3>No applications yet</h3><p>Start a new application and it will appear here.</p></div>
+              ) : (
+                <div className="dashboard-application-cards">
+                  {data.applications.map(application => {
+                    const draft = application.status === 'DRAFT'
+                    const statusTone = application.status === 'APPROVED' ? 'approved' : application.status === 'REJECTED' ? 'rejected' : application.status === 'ACTION_REQUIRED' ? 'action' : application.status === 'IN_REVIEW' || application.status === 'SUBMITTED' ? 'pending' : 'draft'
+                    return (
+                      <article className="dashboard-application-card" key={application.id}>
+                        <div className="dashboard-application-main">
+                          <span className="application-number">{application.application_number}</span>
+                          <h3>{application.company_name || 'Company details pending'}</h3>
+                          <p><strong>Industry:</strong> {application.industry_type || 'Industry not specified'}</p>
+                        </div>
+                        <div className="dashboard-application-meta">
+                          <span className={`status-pill ${statusTone}`}><i />{application.status.replaceAll('_', ' ')}</span>
+                          <small>{application.current_department_name || (draft ? 'Draft stage' : 'Awaiting department assignment')}</small>
+                          <small>{application.progress_percent}% workflow complete</small>
+                        </div>
+                        <a className="dashboard-application-action" href={draft ? `/applicant/applications/${application.id}/edit` : `/applicant/applications/${application.id}/view`}>{draft ? 'Continue' : 'Open'} <span>→</span></a>
+                      </article>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
+            </>
                     </>
         )}
       </main>
