@@ -1141,3 +1141,7 @@ h1,h2,h3,strong { color: var(--ink); }
   .applicant-topbar { padding: 0 16px; }
   .applicant-signout { min-width: 96px; min-height: 38px; }
 }
+
+/* Applicant information architecture */
+.applicant-register-meta .context-link { margin-left: auto; color: #0b6eaa; font-weight: 800; text-decoration: none; }
+.applicant-register-meta .context-link:hover { text-decoration: underline; }
