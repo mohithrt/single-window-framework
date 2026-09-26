@@ -138,7 +138,6 @@ export default function ApplicantDashboard() {
                     </>
         )}
       </main>
-      {notificationsOpen && <NotificationDrawer onClose={() => window.history.replaceState({}, '', '/applicant')} />}
       <footer className="workspace-footer"><span>MAHACLEAR-AI <span>· Faster, Smarter Industrial Approvals</span></span><span>TEAM NORTH-STAR <i>·</i> SIH 2026</span></footer>
     </div>
   )
