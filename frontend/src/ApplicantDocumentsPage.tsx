@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ApplicationDocument, ApplicationsResponse, ApplicationRecord } from './applicationTypes'
 import { DOCUMENT_TYPES, formatDate, statusLabel } from './applicationTypes'
 
-function authHeaders() {
+function authHeaders(): Record<string, string> {
   const token = localStorage.getItem('mahaclear_access_token')
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
