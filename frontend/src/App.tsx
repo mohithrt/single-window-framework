@@ -15,6 +15,7 @@ import AdminDashboardPage from './AdminDashboardPage'
 import MahaClearAssistantPage from './MahaClearAssistantPage'
 import { AdminApplicationPage, AdminAuditPage } from './AdminInspectionPages'
 import ApplicantFeesPage from './ApplicantFeesPage'
+import ApplicantPermissionsPage from './ApplicantPermissionsPage'
 import SystemHealthPage from './SystemHealthPage'
 import AssistantFab from './AssistantFab'
 
@@ -192,6 +193,7 @@ export default function App() {
   if (path === '/notifications') return <WorkspacePage><NotificationCenterPage /></WorkspacePage>
   if (path === '/applicant') return <WorkspacePage><ApplicantDashboard /></WorkspacePage>
   if (path === '/applicant/applications') return <WorkspacePage><ApplicantApplicationsPage /></WorkspacePage>
+  if (path === '/applicant/permissions') return <WorkspacePage><ApplicantPermissionsPage /></WorkspacePage>
   if (path === '/applicant/fees') return <WorkspacePage><ApplicantFeesPage /></WorkspacePage>
   if (path === '/applicant/applications/new') return <WorkspacePage><ApplicationEntryPage /></WorkspacePage>
   const prevalidationRoute = path.match(/^\/applicant\/applications\/(\d+)\/prevalidation$/)
