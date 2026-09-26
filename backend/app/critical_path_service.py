@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from app.models import Application, ApplicationApproval, ApprovalStatus, WorkflowAuditEvent
+
+try:
+    import networkx as nx
+except ImportError:  # pragma: no cover
+    nx = None
 from app.workflow_service import DEFAULT_RULES_PATH
 
 
@@ -61,17 +66,26 @@ class CriticalPathService:
         for code in ordered_codes:
             for dependency in dependencies[code]:
                 dependents[dependency].append(code)
-        ready = deque(code for code in ordered_codes if indegree[code] == 0)
-        topological: list[str] = []
-        while ready:
-            code = ready.popleft()
-            topological.append(code)
-            for dependent in dependents[code]:
-                indegree[dependent] -= 1
-                if indegree[dependent] == 0:
-                    ready.append(dependent)
-        if len(topological) != len(ordered_codes):
-            raise ValueError("Application approval dependencies contain a cycle")
+
+        if nx is not None:
+            graph = nx.DiGraph()
+            graph.add_nodes_from(ordered_codes)
+            graph.add_edges_from((dependency, code) for code in ordered_codes for dependency in dependencies[code])
+            if not nx.is_directed_acyclic_graph(graph):
+                raise ValueError("Application approval dependencies contain a cycle")
+            topological = list(nx.lexicographical_topological_sort(graph, key=lambda code: ordered_codes.index(code)))
+        else:
+            ready = deque(code for code in ordered_codes if indegree[code] == 0)
+            topological = []
+            while ready:
+                code = ready.popleft()
+                topological.append(code)
+                for dependent in dependents[code]:
+                    indegree[dependent] -= 1
+                    if indegree[dependent] == 0:
+                        ready.append(dependent)
+            if len(topological) != len(ordered_codes):
+                raise ValueError("Application approval dependencies contain a cycle")
 
         by_code = required_by_code
         approved = {code for code, row in by_code.items() if row.status == ApprovalStatus.APPROVED.value}

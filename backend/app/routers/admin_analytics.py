@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.analytics_service import AnalyticsService
+from app.cache_service import CacheService
 from app.critical_path_service import CriticalPathService
 from app.database import get_db
 from app.dependencies import CurrentUser, require_roles
@@ -15,6 +16,7 @@ from app.models import (
 )
 from app.workflow_service import WorkflowService
 from app.risk_service import RiskService
+from app.routers.system import system_health
 
 router = APIRouter(prefix="/admin", tags=["government administration"],
                    dependencies=[Depends(require_roles(RoleCode.ADMIN))])
@@ -26,9 +28,24 @@ class IntegrationSubmit(BaseModel):
     request_payload: dict[str, Any] = Field(default_factory=dict, max_length=30)
 
 
+@router.get("/system-health")
+def admin_system_health(db: Database) -> dict:
+    return system_health(db)
+
+
 @router.get("/analytics")
-def admin_analytics(db: Database) -> dict:
-    return AnalyticsService().dashboard(db)
+def admin_analytics(db: Database, fresh: bool = Query(default=False)) -> dict:
+    cache = CacheService()
+    key = "admin:analytics:v2"
+    if not fresh:
+        cached = cache.get(key)
+        if isinstance(cached, dict):
+            cached["cache"] = {"hit": True, "ttl_seconds": 120}
+            return cached
+    report = AnalyticsService().dashboard(db)
+    cache.set(key, report, ttl=120)
+    report["cache"] = {"hit": False, "ttl_seconds": 120}
+    return report
 
 
 @router.get("/departments")
@@ -140,7 +157,12 @@ def admin_audit(db: Database, limit: int = Query(default=100, ge=1, le=500), off
 
 @router.get("/integrations/providers")
 def integration_providers() -> dict:
-    return {"items": provider_catalog(), "notice": "All providers are mocks; no government or utility system is connected."}
+    items = provider_catalog()
+    return {
+        "items": items,
+        "notice": "Providers are mock by default. A provider becomes live only when explicitly configured.",
+        "live_count": sum(1 for item in items if item["connected_to_government"]),
+    }
 
 
 @router.post("/integrations/{provider_code}/submit", status_code=201)
@@ -148,7 +170,7 @@ def submit_integration(provider_code: str, payload: IntegrationSubmit, user: Cur
     try:
         provider = get_provider(provider_code)
     except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Mock provider not found") from exc
+        raise HTTPException(status_code=404, detail="Integration provider not found") from exc
     request_payload = dict(payload.request_payload)
     if payload.application_id is not None:
         application = db.get(Application, payload.application_id)
@@ -160,7 +182,9 @@ def submit_integration(provider_code: str, payload: IntegrationSubmit, user: Cur
             "company_name": application.company_name,
             **request_payload,
         }
-    request_payload["demo_only"] = True
+    request_payload["demo_only"] = not any(
+        item["code"] == provider.code and item["connected_to_government"] for item in provider_catalog()
+    )
     response = provider.submit(request_payload)
     row = IntegrationTransaction(
         provider_code=provider.code, application_id=payload.application_id,

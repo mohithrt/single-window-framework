@@ -1,15 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import activity, admin_analytics, applications, assistant, auth, dashboards, fees, notifications, officer, risks, workflow
-from app.core.config import settings
-
-settings.validate_production()
+from app.routers import activity, admin_analytics, applications, assistant, auth, dashboards, fees, notifications, officer, risks, role_assistant, system, workflow
 
 app = FastAPI(
     title="MAHACLEAR-AI API",
     description="Faster, Smarter Industrial Approvals",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 app.add_middleware(
@@ -30,8 +27,10 @@ app.include_router(officer.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 app.include_router(assistant.router, prefix="/api")
+app.include_router(role_assistant.router, prefix="/api")
 app.include_router(fees.router, prefix="/api")
 app.include_router(admin_analytics.router, prefix="/api")
+app.include_router(system.router, prefix="/api")
 
 
 @app.get("/health", tags=["health"])
