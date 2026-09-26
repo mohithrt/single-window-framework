@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ApplicationsResponse } from './applicationTypes'
 import { formatDate, statusLabel } from './applicationTypes'
-import NotificationDrawer from './NotificationDrawer'
 
 type ApplicantUser = { role: string }
 type DashboardApplication = {
@@ -25,7 +24,6 @@ async function responseMessage(response: Response): Promise<string> {
 }
 
 export default function ApplicantDashboard() {
-  const notificationsOpen = new URLSearchParams(window.location.search).get('notifications') === '1'
   const [data, setData] = useState<ApplicationsResponse | null>(null)
   const [dashboard, setDashboard] = useState<ApplicantDashboardData | null>(null)
   const [error, setError] = useState('')
@@ -95,7 +93,7 @@ export default function ApplicantDashboard() {
         <a className="side-link selected" href="/applicant"><span>◫</span> Dashboard</a>
         <a className="side-link" href="/applicant/applications"><span>▤</span> My applications</a>
         <a className="side-link" href="/applicant/fees"><span>₹</span> Fee ledger</a>
-        <a className="side-link" href="/applicant?notifications=1"><span>◉</span> Notifications</a>
+        <a className="side-link" href="/notifications"><span>◉</span> Notifications</a>
         <div className="sidebar-note"><span className="sidebar-note-mark">✳</span><strong>One window.<br />Every approval.</strong><small>North-Star · SIH 2026</small></div>
         <div className="sidebar-bottom">MAHACLEAR-AI <span>·</span> APPLICANT</div>
       </aside>
