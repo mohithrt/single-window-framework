@@ -250,6 +250,11 @@ def test_joint_inspection_assignment_validation_atomicity_and_persistence(client
             ApplicationApproval.department_code.in_(["MPCB", "DISH"]),
         )).all())
     assert set(approval_ids) == {"MPCB", "DISH"}
+    roster = client.get(f"/api/officer/inspection-officers?application_id={application_id}", headers=officer_headers)
+    assert roster.status_code == 200
+    assert {row["id"] for row in roster.json()["items"]} >= {mpcb_officer_id, dish_officer_id}
+    assert all(row["department_code"] is None or row["department_code"] in {"MPCB", "DISH"}
+               for row in roster.json()["items"])
     payload = {
         "application_id": application_id,
         "approval_ids": [approval_ids["MPCB"], approval_ids["DISH"]],
@@ -284,6 +289,61 @@ def test_joint_inspection_assignment_validation_atomicity_and_persistence(client
         )).all()
         assert len(rows) == 2
         assert {row.officer_user_id for row in rows} == {mpcb_officer_id, dish_officer_id}
+
+
+def test_joint_inspection_application_identifier_is_exact_and_never_falls_back(client) -> None:
+    first_id, _, _ = _submitted_application(client, "joint-exact-first@example.com")
+    second_id, _, _ = _submitted_application(client, "joint-exact-second@example.com")
+    headers = _login(client, "officer@example.com")
+
+    with SessionLocal() as db:
+        first_number = db.get(Application, first_id).application_number
+        second_number = db.get(Application, second_id).application_number
+
+    for identifier, expected_id, expected_number in (
+        (str(first_id), first_id, first_number),
+        (first_number, first_id, first_number),
+        (str(second_id), second_id, second_number),
+    ):
+        loaded = client.get(f"/api/officer/joint-inspection-applications/{identifier}", headers=headers)
+        assert loaded.status_code == 200, loaded.text
+        assert loaded.json()["application_id"] == expected_id
+        assert loaded.json()["application_number"] == expected_number
+        assert loaded.json()["approvals"]
+
+    unknown = client.get("/api/officer/joint-inspection-applications/MADE-UP-ID", headers=headers)
+    assert unknown.status_code == 404
+    assert unknown.json()["detail"] == "Application ID not found. Please enter a valid Application ID."
+    invalid_create = client.post("/api/officer/joint-inspections", headers=headers, json={
+        "application_id": 987654321, "approval_ids": [1, 2],
+        "scheduled_at": (datetime.now(UTC) + timedelta(days=3)).isoformat(),
+        "site": "Test site", "officer_assignments": {},
+    })
+    assert invalid_create.status_code == 404
+    assert invalid_create.json()["detail"] == "Application ID not found. Please enter a valid Application ID."
+
+    created_joints = {}
+    for application_id in (first_id, second_id):
+        approvals = client.get(
+            f"/api/officer/joint-inspection-applications/{application_id}", headers=headers
+        ).json()["approvals"]
+        response = client.post("/api/officer/joint-inspections", headers=headers, json={
+            "application_id": application_id,
+            "approval_ids": [approval["id"] for approval in approvals[:2]],
+            "scheduled_at": (datetime.now(UTC) + timedelta(days=5)).isoformat(),
+            "site": f"Exact application site {application_id}", "officer_assignments": {},
+        })
+        assert response.status_code == 201, response.text
+        assert response.json()["application_id"] == application_id
+        created_joints[application_id] = response.json()["id"]
+
+    with SessionLocal() as db:
+        for application_id, joint_id in created_joints.items():
+            saved = db.get(JointInspection, joint_id)
+            assert saved is not None and saved.application_id == application_id
+        assert db.scalar(select(JointInspection.id).where(
+            JointInspection.application_id == 987654321
+        )) is None
 
 
 def test_inspection_creation_requires_officer_and_valid_future_datetime(client) -> None:

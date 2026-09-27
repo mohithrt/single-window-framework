@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import or_, select
+from sqlalchemy import false, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -18,7 +18,7 @@ from app.dependencies import CurrentUser, require_roles
 from app.models import (
     Application, ApplicationApproval, ApplicationDocument, ApplicationStatus,
     ApplicationValidationIssue, ApprovalStatus, Inspection, InspectionParticipant,
-    JointInspection, Notification, RiskAssessment, Role, RoleCode, User, WorkflowAuditEvent,
+    Department, JointInspection, Notification, RiskAssessment, Role, RoleCode, User, WorkflowAuditEvent,
 )
 from app.inspection_schemas import InspectionUpdateRequest, JointInspectionCreate, JointInspectionUpdateRequest
 from app.officer_schemas import InspectionScheduleRequest, OfficerRemarkRequest
@@ -399,7 +399,7 @@ def list_inspections(
 def schedule_joint_inspection(payload: JointInspectionCreate, user: CurrentUser, db: Database) -> dict:
     application = db.get(Application, payload.application_id)
     if application is None or application.status == ApplicationStatus.DRAFT.value:
-        raise HTTPException(status_code=404, detail="Submitted application not found")
+        raise HTTPException(status_code=404, detail="Application ID not found. Please enter a valid Application ID.")
     approvals = db.scalars(select(ApplicationApproval).where(
         ApplicationApproval.id.in_(payload.approval_ids),
         ApplicationApproval.application_id == application.id,
@@ -474,11 +474,49 @@ def schedule_joint_inspection(payload: JointInspectionCreate, user: CurrentUser,
         raise HTTPException(status_code=500, detail="Unable to save this joint inspection. Please check the schedule and participants, then try again.") from exc
 
 
+@router.get("/joint-inspection-applications/{application_identifier}")
+def joint_inspection_application(application_identifier: str, db: Database) -> dict:
+    identifier = application_identifier.strip()
+    if not identifier:
+        application = None
+    elif identifier.isdecimal():
+        application = db.get(Application, int(identifier))
+    else:
+        application = db.scalar(select(Application).where(Application.application_number == identifier))
+    if application is None:
+        raise HTTPException(status_code=404, detail="Application ID not found. Please enter a valid Application ID.")
+    if application.status == ApplicationStatus.DRAFT.value:
+        raise HTTPException(status_code=409, detail="This application has not been submitted and cannot be scheduled for inspection.")
+    approvals = db.scalars(select(ApplicationApproval).where(
+        ApplicationApproval.application_id == application.id,
+        ApplicationApproval.is_required.is_(True),
+        ApplicationApproval.status.in_({ApprovalStatus.PENDING.value, ApprovalStatus.IN_REVIEW.value,
+            ApprovalStatus.INSPECTION_REQUIRED.value, ApprovalStatus.ESCALATED.value}),
+    ).order_by(ApplicationApproval.id)).all()
+    return {
+        "application_id": application.id,
+        "application_number": application.application_number,
+        "company_name": application.company_name,
+        "approvals": [{"id": row.id, "department_code": row.department_code,
+            "department_name": row.department_name, "status": row.status,
+            "is_required": row.is_required} for row in approvals],
+    }
+
+
 @router.get("/inspection-officers")
-def inspection_officers(db: Database) -> dict:
+def inspection_officers(db: Database, application_id: int = Query(gt=0)) -> dict:
+    application = db.get(Application, application_id)
+    if application is None:
+        raise HTTPException(status_code=404, detail="Application ID not found. Please enter a valid Application ID.")
+    department_codes = set(db.scalars(select(ApplicationApproval.department_code).where(
+        ApplicationApproval.application_id == application.id,
+        ApplicationApproval.is_required.is_(True),
+    )).all())
+    eligible_department = User.department.has(Department.code.in_(department_codes)) if department_codes else false()
     officers = db.scalars(select(User).join(User.role).options(
         joinedload(User.department),
-    ).where(Role.code == RoleCode.OFFICER.value, User.is_active.is_(True)).order_by(User.full_name)).all()
+    ).where(Role.code == RoleCode.OFFICER.value, User.is_active.is_(True),
+        or_(eligible_department, User.department_id.is_(None))).order_by(User.full_name)).all()
     return {"items": [{"id": officer.id, "name": officer.full_name,
                         "department_code": officer.department.code if officer.department else None,
                         "department_name": officer.department.name if officer.department else None}

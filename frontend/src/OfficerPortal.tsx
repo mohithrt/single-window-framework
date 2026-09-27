@@ -1,5 +1,5 @@
 import { apiUrl } from './apiBase'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import AuthenticatedDownload from './AuthenticatedDownload'
 
@@ -251,33 +251,46 @@ function InspectionList({ type }: { type: 'SINGLE' | 'JOINT' }) {
 
 function JointInspectionForm({ onCreated, onError }: { onCreated: () => void; onError: (message: string) => void }) {
   const [applicationId, setApplicationId] = useState('')
+  const [loadedApplication, setLoadedApplication] = useState<{ id: number; number: string; company: string | null } | null>(null)
   const [approvals, setApprovals] = useState<Array<{ id: number; department_code: string; department_name: string; status: string; is_required: boolean }>>([])
   const [officers, setOfficers] = useState<Array<{ id: number; name: string; department_code: string | null; department_name: string | null }>>([])
-  const [assignments, setAssignments] = useState<Record<number, number>>({})
+  const [assignments, setAssignments] = useState<Record<number, number | null>>({})
   const [selected, setSelected] = useState<number[]>([])
   const [date, setDate] = useState('')
   const [site, setSite] = useState('')
   const [instructions, setInstructions] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const loadSequence = useRef(0)
+  function clearApplication() {
+    loadSequence.current += 1
+    setLoading(false)
+    setLoadedApplication(null); setApprovals([]); setOfficers([]); setSelected([]); setAssignments({})
+  }
   async function loadApprovals() {
-    onError('')
+    onError(''); clearApplication(); setLoading(true)
+    const sequence = loadSequence.current
     try {
-      const result = await api<{ approvals: Array<{ id: number; department_code: string; department_name: string; status: string; is_required: boolean }> }>(apiUrl(`/api/applications/${applicationId}/approvals`))
-      setApprovals(result.approvals.filter((item) => item.is_required && ['PENDING', 'IN_REVIEW', 'INSPECTION_REQUIRED', 'ESCALATED'].includes(item.status)))
-      const roster = await api<{ items: Array<{ id: number; name: string; department_code: string | null; department_name: string | null }> }>(apiUrl('/api/officer/inspection-officers'))
+      const result = await api<{ application_id: number; application_number: string; company_name: string | null; approvals: Array<{ id: number; department_code: string; department_name: string; status: string; is_required: boolean }> }>(apiUrl(`/api/officer/joint-inspection-applications/${encodeURIComponent(applicationId.trim())}`))
+      const roster = await api<{ items: Array<{ id: number; name: string; department_code: string | null; department_name: string | null }> }>(apiUrl(`/api/officer/inspection-officers?application_id=${result.application_id}`))
+      if (sequence !== loadSequence.current) return
+      setLoadedApplication({ id: result.application_id, number: result.application_number, company: result.company_name })
+      setApprovals(result.approvals)
       setOfficers(roster.items)
-      setSelected([])
-    } catch (caught) { onError(caught instanceof Error ? caught.message : 'Could not load department approvals.') }
+    } catch (caught) { if (sequence === loadSequence.current) onError(caught instanceof Error ? caught.message : 'Could not load department approvals.') }
+    finally { if (sequence === loadSequence.current) setLoading(false) }
   }
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); onError('')
     try {
-      await api(apiUrl('/api/officer/joint-inspections'), { method: 'POST', body: JSON.stringify({ application_id: Number(applicationId), approval_ids: selected, scheduled_at: new Date(date).toISOString(), site, instructions: instructions || null, officer_assignments: assignments }) })
-      setApplicationId(''); setApprovals([]); setOfficers([]); setSelected([]); setAssignments({}); setDate(''); setSite(''); setInstructions(''); onCreated()
+      if (!loadedApplication || !approvals.length || selected.length < 2) throw new Error('Load a valid application and select at least two departments first.')
+      const officerAssignments = Object.fromEntries(Object.entries(assignments).filter(([, officerId]) => officerId !== null))
+      await api(apiUrl('/api/officer/joint-inspections'), { method: 'POST', body: JSON.stringify({ application_id: loadedApplication.id, approval_ids: selected, scheduled_at: new Date(date).toISOString(), site, instructions: instructions || null, officer_assignments: officerAssignments }) })
+      setApplicationId(''); clearApplication(); setDate(''); setSite(''); setInstructions(''); onCreated()
     } catch (caught) { onError(caught instanceof Error ? caught.message : 'Could not schedule joint inspection.') }
     finally { setBusy(false) }
   }
-  return <form className="inspection-editor-form" onSubmit={submit}><div className="joint-load-row"><label>Application ID<input type="number" min="1" required value={applicationId} onChange={(event) => setApplicationId(event.target.value)}/></label><button className="officer-button secondary" type="button" disabled={!applicationId} onClick={() => void loadApprovals()}>Load departments</button></div>{approvals.length > 0 && <div className="joint-departments">{approvals.map((approval) => <div className="joint-department-row" key={approval.id}><label><input type="checkbox" checked={selected.includes(approval.id)} onChange={(event) => { setSelected((current) => event.target.checked ? [...current, approval.id] : current.filter((id) => id !== approval.id)); if (!event.target.checked) setAssignments((current) => { const next = { ...current }; delete next[approval.id]; return next }) }}/><span><strong>{approval.department_name}</strong><small>{label(approval.status)}</small></span></label>{selected.includes(approval.id) && <select aria-label={`Officer for ${approval.department_name}`} value={assignments[approval.id] ?? ''} onChange={(event) => setAssignments((current) => { const next = { ...current }; if (event.target.value) next[approval.id] = Number(event.target.value); else delete next[approval.id]; return next })}><option value="">Leave officer unassigned</option>{officers.filter((officer) => !officer.department_code || officer.department_code === approval.department_code).map((officer) => <option key={officer.id} value={officer.id}>{officer.name}{officer.department_name ? ` · ${officer.department_name}` : ''}</option>)}</select>}</div>)}</div>}{applicationId && approvals.length === 0 && <p className="action-hint">No required department approvals are currently available for a joint inspection.</p>}<div className="inspection-editor-grid"><label>Date and time<input type="datetime-local" min={futureDateTimeMin()} required value={date} onChange={(event) => setDate(event.target.value)}/></label><label>Site<input required minLength={3} value={site} onChange={(event) => setSite(event.target.value)}/></label></div><label>Instructions<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)}/></label><button className="officer-button primary" disabled={busy || selected.length < 2 || !date || !site.trim()}>{busy ? 'Scheduling…' : `Schedule joint inspection · ${selected.length} departments`}</button></form>
+  return <form className="inspection-editor-form" onSubmit={submit}><div className="joint-load-row"><label>Application ID<input type="text" required value={applicationId} placeholder="MCAI-2026-000001 or numeric ID" onChange={(event) => { setApplicationId(event.target.value); clearApplication(); onError('') }}/></label><button className="officer-button secondary" type="button" disabled={!applicationId.trim() || loading} onClick={() => void loadApprovals()}>{loading ? 'Loading…' : 'Load departments'}</button></div>{loadedApplication && <p className="action-hint">Loaded {loadedApplication.number} · Database ID {loadedApplication.id}{loadedApplication.company ? ` · ${loadedApplication.company}` : ''}</p>}{approvals.length > 0 && <div className="joint-departments">{approvals.map((approval) => <div className="joint-department-row" key={approval.id}><label><input type="checkbox" checked={selected.includes(approval.id)} onChange={(event) => { setSelected((current) => event.target.checked ? [...current, approval.id] : current.filter((id) => id !== approval.id)); if (!event.target.checked) setAssignments((current) => { const next = { ...current }; delete next[approval.id]; return next }) }}/><span><strong>{approval.department_name}</strong><small>{label(approval.status)}</small></span></label>{selected.includes(approval.id) && (officers.some((officer) => !officer.department_code || officer.department_code === approval.department_code) ? <select aria-label={`Officer for ${approval.department_name}`} value={assignments[approval.id] === null ? '__unassigned' : assignments[approval.id] ?? ''} onChange={(event) => setAssignments((current) => { const next = { ...current }; if (event.target.value === '__unassigned') next[approval.id] = null; else if (event.target.value) next[approval.id] = Number(event.target.value); else delete next[approval.id]; return next })}><option value="">-- Select officer (optional) --</option>{officers.filter((officer) => !officer.department_code || officer.department_code === approval.department_code).map((officer) => <option key={officer.id} value={officer.id}>{officer.name}{officer.department_name ? ` · ${officer.department_name}` : ' · Department unassigned'}</option>)}<option value="__unassigned">Leave unassigned</option></select> : <p className="action-hint">No active officers are assigned to {approval.department_name}. Assignment is optional.</p>)}</div>)}</div>}{loadedApplication && approvals.length === 0 && <p className="action-hint">No required department approvals are currently available for this application.</p>}<div className="inspection-editor-grid"><label>Date and time<input type="datetime-local" min={futureDateTimeMin()} required value={date} onChange={(event) => setDate(event.target.value)}/></label><label>Site<input required minLength={3} value={site} onChange={(event) => setSite(event.target.value)}/></label></div><label>Instructions<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)}/></label><button className="officer-button primary" disabled={busy || loading || !loadedApplication || selected.length < 2 || !date || !site.trim()}>{busy ? 'Scheduling…' : `Schedule joint inspection · ${selected.length} departments`}</button></form>
 }
 
 function InspectionEditor({ inspectionId, kind, onClose, onSaved }: { inspectionId: number; kind: 'SINGLE' | 'JOINT'; onClose: () => void; onSaved: () => void }) {
