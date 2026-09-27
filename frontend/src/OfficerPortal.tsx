@@ -34,13 +34,29 @@ const nav: Array<[View, string, string]> = [
 const label = (value: string | null | undefined) => value ? value.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase()) : '—'
 const dateLabel = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—'
 const dateOnly = (value: string | null | undefined) => value ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date(value)) : '—'
+const futureDateTimeMin = () => {
+  const localFuture = new Date(Date.now() + 60_000)
+  localFuture.setMinutes(localFuture.getMinutes() - localFuture.getTimezoneOffset())
+  return localFuture.toISOString().slice(0, 16)
+}
 
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('mahaclear_access_token')
   if (!token) { window.location.assign('/login'); throw new Error('Sign in to continue.') }
   const response = await fetch(path, { ...init, headers: { Authorization: `Bearer ${token}`, ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers } })
   const body = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'The request could not be completed.')
+  if (!response.ok) {
+    const detail = body.detail
+    if (typeof detail === 'string') throw new Error(detail)
+    if (Array.isArray(detail)) {
+      const messages = detail.map((issue: { loc?: unknown[]; msg?: string }) => {
+        const field = Array.isArray(issue.loc) ? issue.loc.filter((part) => part !== 'body').join('.') : ''
+        return `${field ? `${field}: ` : ''}${issue.msg || 'Invalid value'}`
+      })
+      throw new Error(messages.length ? messages.join(' · ') : `The server rejected this request (HTTP ${response.status}).`)
+    }
+    throw new Error(`The server could not complete this request (HTTP ${response.status}).`)
+  }
   return body as T
 }
 
@@ -213,7 +229,7 @@ function ReviewPage({ approvalId }: { approvalId: number }) {
             <button className="officer-button success" disabled={busy} onClick={() => void postAction(apiUrl(`/api/approvals/${approvalId}/approve`))}>Approve application</button>
             <form className="officer-action-form" onSubmit={rejectSubmit}><label>Reject with reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} minLength={1} required placeholder="Explain the reason for rejection"/></label><button className="officer-button danger" disabled={busy || !reason.trim()}>Reject</button></form>
             <form className="officer-action-form" onSubmit={correctionSubmit}><label>Request correction<textarea value={correction} onChange={(event) => setCorrection(event.target.value)} minLength={1} required placeholder="Describe what the applicant needs to correct"/></label><button className="officer-button secondary" disabled={busy || !correction.trim()}>Request correction</button></form>
-            <form className="officer-action-form" onSubmit={inspectionSubmit}><label>Schedule inspection<span className="action-hint">Department inspections can be scheduled here. Use Joint Inspections in the sidebar to coordinate multiple departments.</span></label><label>Date and time<input type="datetime-local" value={inspectionDate} onChange={(event) => setInspectionDate(event.target.value)} required/></label><label>Location<input value={inspectionLocation} onChange={(event) => setInspectionLocation(event.target.value)} required minLength={3} placeholder="Inspection site address"/></label><label>Instructions<textarea value={inspectionInstructions} onChange={(event) => setInspectionInstructions(event.target.value)} placeholder="Optional inspection notes"/></label><button className="officer-button secondary" disabled={busy || !inspectionDate || !inspectionLocation.trim()}>Schedule inspection</button></form>
+            <form className="officer-action-form" onSubmit={inspectionSubmit}><label>Schedule inspection<span className="action-hint">Department inspections can be scheduled here. Use Joint Inspections in the sidebar to coordinate multiple departments.</span></label><label>Date and time<input type="datetime-local" min={futureDateTimeMin()} value={inspectionDate} onChange={(event) => setInspectionDate(event.target.value)} required/></label><label>Location<input value={inspectionLocation} onChange={(event) => setInspectionLocation(event.target.value)} required minLength={3} placeholder="Inspection site address"/></label><label>Instructions<textarea value={inspectionInstructions} onChange={(event) => setInspectionInstructions(event.target.value)} placeholder="Optional inspection notes"/></label><button className="officer-button secondary" disabled={busy || !inspectionDate || !inspectionLocation.trim()}>Schedule inspection</button></form>
           </> : !canStartReview && <p className="action-hint">Actions are available once this department has started its review.</p>}
           <form className="officer-action-form remark-form" onSubmit={remarkSubmit}><label>Add internal remark<textarea value={remark} onChange={(event) => setRemark(event.target.value)} required placeholder="Visible to officers only"/></label><button className="officer-button secondary" disabled={busy || !remark.trim()}>Add remark</button></form>
         </section>
@@ -235,8 +251,8 @@ function InspectionList({ type }: { type: 'SINGLE' | 'JOINT' }) {
 
 function JointInspectionForm({ onCreated, onError }: { onCreated: () => void; onError: (message: string) => void }) {
   const [applicationId, setApplicationId] = useState('')
-  const [approvals, setApprovals] = useState<Array<{ id: number; department_name: string; status: string; is_required: boolean }>>([])
-  const [officers, setOfficers] = useState<Array<{ id: number; name: string; department_name: string | null }>>([])
+  const [approvals, setApprovals] = useState<Array<{ id: number; department_code: string; department_name: string; status: string; is_required: boolean }>>([])
+  const [officers, setOfficers] = useState<Array<{ id: number; name: string; department_code: string | null; department_name: string | null }>>([])
   const [assignments, setAssignments] = useState<Record<number, number>>({})
   const [selected, setSelected] = useState<number[]>([])
   const [date, setDate] = useState('')
@@ -246,9 +262,9 @@ function JointInspectionForm({ onCreated, onError }: { onCreated: () => void; on
   async function loadApprovals() {
     onError('')
     try {
-      const result = await api<{ approvals: Array<{ id: number; department_name: string; status: string; is_required: boolean }> }>(apiUrl(`/api/applications/${applicationId}/approvals`))
+      const result = await api<{ approvals: Array<{ id: number; department_code: string; department_name: string; status: string; is_required: boolean }> }>(apiUrl(`/api/applications/${applicationId}/approvals`))
       setApprovals(result.approvals.filter((item) => item.is_required && ['PENDING', 'IN_REVIEW', 'INSPECTION_REQUIRED', 'ESCALATED'].includes(item.status)))
-      const roster = await api<{ items: Array<{ id: number; name: string; department_name: string | null }> }>(apiUrl('/api/officer/inspection-officers'))
+      const roster = await api<{ items: Array<{ id: number; name: string; department_code: string | null; department_name: string | null }> }>(apiUrl('/api/officer/inspection-officers'))
       setOfficers(roster.items)
       setSelected([])
     } catch (caught) { onError(caught instanceof Error ? caught.message : 'Could not load department approvals.') }
@@ -261,7 +277,7 @@ function JointInspectionForm({ onCreated, onError }: { onCreated: () => void; on
     } catch (caught) { onError(caught instanceof Error ? caught.message : 'Could not schedule joint inspection.') }
     finally { setBusy(false) }
   }
-  return <form className="inspection-editor-form" onSubmit={submit}><div className="joint-load-row"><label>Application ID<input type="number" min="1" required value={applicationId} onChange={(event) => setApplicationId(event.target.value)}/></label><button className="officer-button secondary" type="button" disabled={!applicationId} onClick={() => void loadApprovals()}>Load departments</button></div>{approvals.length > 0 && <div className="joint-departments">{approvals.map((approval) => <div className="joint-department-row" key={approval.id}><label><input type="checkbox" checked={selected.includes(approval.id)} onChange={(event) => { setSelected((current) => event.target.checked ? [...current, approval.id] : current.filter((id) => id !== approval.id)); if (!event.target.checked) setAssignments((current) => { const next = { ...current }; delete next[approval.id]; return next }) }}/><span><strong>{approval.department_name}</strong><small>{label(approval.status)}</small></span></label>{selected.includes(approval.id) && <select aria-label={`Officer for ${approval.department_name}`} value={assignments[approval.id] ?? ''} onChange={(event) => setAssignments((current) => { const next = { ...current }; if (event.target.value) next[approval.id] = Number(event.target.value); else delete next[approval.id]; return next })}><option value="">Leave officer unassigned</option>{officers.map((officer) => <option key={officer.id} value={officer.id}>{officer.name}{officer.department_name ? ` · ${officer.department_name}` : ''}</option>)}</select>}</div>)}</div>}<div className="inspection-editor-grid"><label>Date and time<input type="datetime-local" required value={date} onChange={(event) => setDate(event.target.value)}/></label><label>Site<input required minLength={3} value={site} onChange={(event) => setSite(event.target.value)}/></label></div><label>Instructions<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)}/></label><button className="officer-button primary" disabled={busy || selected.length < 2 || !date || !site.trim()}>{busy ? 'Scheduling…' : `Schedule joint inspection · ${selected.length} departments`}</button></form>
+  return <form className="inspection-editor-form" onSubmit={submit}><div className="joint-load-row"><label>Application ID<input type="number" min="1" required value={applicationId} onChange={(event) => setApplicationId(event.target.value)}/></label><button className="officer-button secondary" type="button" disabled={!applicationId} onClick={() => void loadApprovals()}>Load departments</button></div>{approvals.length > 0 && <div className="joint-departments">{approvals.map((approval) => <div className="joint-department-row" key={approval.id}><label><input type="checkbox" checked={selected.includes(approval.id)} onChange={(event) => { setSelected((current) => event.target.checked ? [...current, approval.id] : current.filter((id) => id !== approval.id)); if (!event.target.checked) setAssignments((current) => { const next = { ...current }; delete next[approval.id]; return next }) }}/><span><strong>{approval.department_name}</strong><small>{label(approval.status)}</small></span></label>{selected.includes(approval.id) && <select aria-label={`Officer for ${approval.department_name}`} value={assignments[approval.id] ?? ''} onChange={(event) => setAssignments((current) => { const next = { ...current }; if (event.target.value) next[approval.id] = Number(event.target.value); else delete next[approval.id]; return next })}><option value="">Leave officer unassigned</option>{officers.filter((officer) => !officer.department_code || officer.department_code === approval.department_code).map((officer) => <option key={officer.id} value={officer.id}>{officer.name}{officer.department_name ? ` · ${officer.department_name}` : ''}</option>)}</select>}</div>)}</div>}{applicationId && approvals.length === 0 && <p className="action-hint">No required department approvals are currently available for a joint inspection.</p>}<div className="inspection-editor-grid"><label>Date and time<input type="datetime-local" min={futureDateTimeMin()} required value={date} onChange={(event) => setDate(event.target.value)}/></label><label>Site<input required minLength={3} value={site} onChange={(event) => setSite(event.target.value)}/></label></div><label>Instructions<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)}/></label><button className="officer-button primary" disabled={busy || selected.length < 2 || !date || !site.trim()}>{busy ? 'Scheduling…' : `Schedule joint inspection · ${selected.length} departments`}</button></form>
 }
 
 function InspectionEditor({ inspectionId, kind, onClose, onSaved }: { inspectionId: number; kind: 'SINGLE' | 'JOINT'; onClose: () => void; onSaved: () => void }) {

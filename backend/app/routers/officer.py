@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 import hashlib
+import logging
 from pathlib import Path
 from typing import Annotated, Literal
 from uuid import uuid4
@@ -7,6 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import or_, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.critical_path_service import CriticalPathService
@@ -29,6 +31,7 @@ router = APIRouter(
     tags=["department officer portal"],
     dependencies=[Depends(require_roles(RoleCode.OFFICER))],
 )
+logger = logging.getLogger(__name__)
 Database = Annotated[Session, Depends(get_db)]
 SLA_TERMINAL = {ApprovalStatus.APPROVED.value, ApprovalStatus.REJECTED.value}
 SLA_PAUSED = {ApprovalStatus.NOT_STARTED.value}
@@ -332,28 +335,37 @@ def schedule_inspection(approval_id: int, payload: InspectionScheduleRequest, us
         instructions=payload.instructions,
         scheduled_by_user_id=user.id,
     )
-    db.add(inspection)
-    db.flush()
-    previous = approval.status
-    approval.status = ApprovalStatus.INSPECTION_REQUIRED.value
-    approval.decision_message = payload.instructions or f"{payload.inspection_type.title()} inspection scheduled."
-    approval.updated_at = datetime.now(UTC)
-    db.add(WorkflowAuditEvent(
-        application_id=approval.application_id,
-        approval_id=approval.id,
-        actor_user_id=user.id,
-        action="INSPECTION_SCHEDULED",
-        from_status=previous,
-        to_status=approval.status,
-        message=approval.decision_message,
-        details={"inspection_id": inspection.id, "inspection_type": inspection.inspection_type,
-                 "scheduled_at": inspection.scheduled_at.isoformat(), "location": inspection.location},
-    ))
-    notify_applicant(db, approval.application, "INSPECTION_SCHEDULED",
-                     f"{approval.department_name} scheduled an inspection for {payload.scheduled_at:%d %B %Y %H:%M} at {payload.location}.")
-    db.commit()
-    db.refresh(inspection)
-    return _inspection_payload(inspection)
+    try:
+        db.add(inspection)
+        db.flush()
+        previous = approval.status
+        approval.status = ApprovalStatus.INSPECTION_REQUIRED.value
+        approval.decision_message = payload.instructions or f"{payload.inspection_type.title()} inspection scheduled."
+        approval.updated_at = datetime.now(UTC)
+        db.add(WorkflowAuditEvent(
+            application_id=approval.application_id,
+            approval_id=approval.id,
+            actor_user_id=user.id,
+            action="INSPECTION_SCHEDULED",
+            from_status=previous,
+            to_status=approval.status,
+            message=approval.decision_message,
+            details={"inspection_id": inspection.id, "inspection_type": inspection.inspection_type,
+                     "scheduled_at": inspection.scheduled_at.isoformat(), "location": inspection.location},
+        ))
+        notify_applicant(db, approval.application, "INSPECTION_SCHEDULED",
+                         f"{approval.department_name} scheduled an inspection for {payload.scheduled_at:%d %B %Y %H:%M} at {payload.location}.")
+        saved = db.scalar(select(Inspection).options(
+            joinedload(Inspection.application), joinedload(Inspection.approval),
+            joinedload(Inspection.scheduled_by),
+        ).where(Inspection.id == inspection.id))
+        response = _inspection_payload(saved)
+        db.commit()
+        return response
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Inspection persistence failed for approval_id=%s", approval_id)
+        raise HTTPException(status_code=500, detail="Unable to save this inspection. Please check the schedule and try again.") from exc
 
 
 @router.get("/inspections")
@@ -406,7 +418,7 @@ def schedule_joint_inspection(payload: JointInspectionCreate, user: CurrentUser,
         officers = {row.id: row for row in db.scalars(select(User).options(
             joinedload(User.role), joinedload(User.department),
         ).where(
-            User.id.in_(set(payload.officer_assignments.values()))
+            User.id.in_(set(payload.officer_assignments.values())), User.is_active.is_(True),
         )).all()}
         if set(officers) != set(payload.officer_assignments.values()) or any(
             officer.role.code != RoleCode.OFFICER.value for officer in officers.values()
@@ -419,40 +431,47 @@ def schedule_joint_inspection(payload: JointInspectionCreate, user: CurrentUser,
             for approval_id, officer_id in payload.officer_assignments.items()
         ):
             raise HTTPException(status_code=422, detail="Assigned officers must belong to the participating department")
-    joint = JointInspection(
-        application_id=application.id, scheduled_at=payload.scheduled_at,
-        site=payload.site, instructions=payload.instructions,
-        checklist=payload.checklist, scheduled_by_user_id=user.id,
-    )
-    db.add(joint)
-    db.flush()
-    for approval in approvals:
-        prior = approval.status
-        approval.status = ApprovalStatus.INSPECTION_REQUIRED.value
-        approval.decision_message = payload.instructions or "Participate in the scheduled joint inspection."
-        if approval.assigned_reviewer_id is None:
-            approval.assigned_reviewer_id = payload.officer_assignments.get(approval.id)
-        db.add(InspectionParticipant(
-            joint_inspection_id=joint.id, approval_id=approval.id,
-            officer_user_id=payload.officer_assignments.get(approval.id), status="INVITED",
-        ))
-        db.add(WorkflowAuditEvent(
-            application_id=application.id, approval_id=approval.id,
-            actor_user_id=user.id, department_code=approval.department_code,
-            action="JOINT_INSPECTION_SCHEDULED", from_status=prior,
-            to_status=approval.status, message=payload.instructions or "Joint inspection scheduled.",
-            details={"joint_inspection_id": joint.id, "scheduled_at": payload.scheduled_at.isoformat(),
-                     "site": payload.site},
-        ))
-    notify_applicant(db, application, "JOINT_INSPECTION_SCHEDULED",
-                     f"A joint inspection is scheduled for {payload.scheduled_at:%d %B %Y %H:%M} at {payload.site}.")
-    db.commit()
-    result = db.scalar(select(JointInspection).options(
-        joinedload(JointInspection.application), joinedload(JointInspection.scheduled_by),
-        selectinload(JointInspection.participants).joinedload(InspectionParticipant.approval),
-        selectinload(JointInspection.participants).joinedload(InspectionParticipant.officer),
-    ).where(JointInspection.id == joint.id))
-    return _joint_payload(result)
+    try:
+        joint = JointInspection(
+            application_id=application.id, scheduled_at=payload.scheduled_at,
+            site=payload.site, instructions=payload.instructions,
+            checklist=payload.checklist, scheduled_by_user_id=user.id,
+        )
+        db.add(joint)
+        db.flush()
+        for approval in approvals:
+            prior = approval.status
+            approval.status = ApprovalStatus.INSPECTION_REQUIRED.value
+            approval.decision_message = payload.instructions or "Participate in the scheduled joint inspection."
+            if approval.assigned_reviewer_id is None:
+                approval.assigned_reviewer_id = payload.officer_assignments.get(approval.id)
+            db.add(InspectionParticipant(
+                joint_inspection_id=joint.id, approval_id=approval.id,
+                officer_user_id=payload.officer_assignments.get(approval.id), status="INVITED",
+            ))
+            db.add(WorkflowAuditEvent(
+                application_id=application.id, approval_id=approval.id,
+                actor_user_id=user.id, department_code=approval.department_code,
+                action="JOINT_INSPECTION_SCHEDULED", from_status=prior,
+                to_status=approval.status, message=payload.instructions or "Joint inspection scheduled.",
+                details={"joint_inspection_id": joint.id, "scheduled_at": payload.scheduled_at.isoformat(),
+                         "site": payload.site},
+            ))
+        notify_applicant(db, application, "JOINT_INSPECTION_SCHEDULED",
+                         f"A joint inspection is scheduled for {payload.scheduled_at:%d %B %Y %H:%M} at {payload.site}.")
+        db.flush()
+        result = db.scalar(select(JointInspection).options(
+            joinedload(JointInspection.application), joinedload(JointInspection.scheduled_by),
+            selectinload(JointInspection.participants).joinedload(InspectionParticipant.approval),
+            selectinload(JointInspection.participants).joinedload(InspectionParticipant.officer),
+        ).where(JointInspection.id == joint.id))
+        response = _joint_payload(result)
+        db.commit()
+        return response
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Joint inspection persistence failed for application_id=%s", payload.application_id)
+        raise HTTPException(status_code=500, detail="Unable to save this joint inspection. Please check the schedule and participants, then try again.") from exc
 
 
 @router.get("/inspection-officers")

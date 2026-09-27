@@ -1,11 +1,13 @@
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from sqlalchemy import select
 
 from app.database import SessionLocal
+from app.core.security import hash_password
 from app.models import (
-    Application, ApplicationApproval, ApplicationStatus, Inspection, InspectionParticipant,
-    WorkflowAuditEvent,
+    Application, ApplicationApproval, ApplicationStatus, Company, Department, Inspection,
+    InspectionParticipant, JointInspection, Role, User, WorkflowAuditEvent,
 )
 
 
@@ -221,3 +223,84 @@ def test_joint_inspection_participants_completion_audit_and_notifications(client
             ApplicationApproval.id.in_(approval_ids)
         )).all()
         assert statuses == ["IN_REVIEW", "IN_REVIEW"]
+
+
+def test_joint_inspection_assignment_validation_atomicity_and_persistence(client) -> None:
+    application_id, _, _ = _submitted_application(client, "joint-assignment-owner@example.com")
+    officer_headers = _login(client, "officer@example.com")
+    suffix = uuid4().hex[:10]
+    with SessionLocal.begin() as db:
+        role = db.scalar(select(Role).where(Role.code == "OFFICER"))
+        authority = Company(name=f"Inspection Authority {suffix}")
+        db.add(authority)
+        db.flush()
+        mpcb = Department(company_id=authority.id, code="MPCB", name="MPCB")
+        dish = Department(company_id=authority.id, code="DISH", name="DISH")
+        db.add_all([mpcb, dish])
+        db.flush()
+        mpcb_officer = User(email=f"mpcb.{suffix}@example.com", full_name="MPCB Officer",
+            password_hash=hash_password("TempPassphrase2026!"), role_id=role.id, department_id=mpcb.id)
+        dish_officer = User(email=f"dish.{suffix}@example.com", full_name="DISH Officer",
+            password_hash=hash_password("TempPassphrase2026!"), role_id=role.id, department_id=dish.id)
+        db.add_all([mpcb_officer, dish_officer])
+        db.flush()
+        mpcb_officer_id, dish_officer_id = mpcb_officer.id, dish_officer.id
+        approval_ids = dict(db.execute(select(ApplicationApproval.department_code, ApplicationApproval.id).where(
+            ApplicationApproval.application_id == application_id,
+            ApplicationApproval.department_code.in_(["MPCB", "DISH"]),
+        )).all())
+    assert set(approval_ids) == {"MPCB", "DISH"}
+    payload = {
+        "application_id": application_id,
+        "approval_ids": [approval_ids["MPCB"], approval_ids["DISH"]],
+        "scheduled_at": (datetime.now(UTC) + timedelta(days=8)).isoformat(),
+        "site": "Chakan MIDC, Pune", "instructions": "Joint regulatory inspection.",
+        "officer_assignments": {
+            str(approval_ids["MPCB"]): dish_officer_id,
+            str(approval_ids["DISH"]): mpcb_officer_id,
+        },
+    }
+    wrong_assignment = client.post("/api/officer/joint-inspections", headers=officer_headers, json=payload)
+    assert wrong_assignment.status_code == 422
+    with SessionLocal() as db:
+        assert db.scalar(select(JointInspection.id).where(JointInspection.application_id == application_id)) is None
+
+    payload["officer_assignments"] = {
+        str(approval_ids["MPCB"]): mpcb_officer_id,
+        str(approval_ids["DISH"]): dish_officer_id,
+    }
+    created = client.post("/api/officer/joint-inspections", headers=officer_headers, json=payload)
+    assert created.status_code == 201, created.text
+    joint_id = created.json()["id"]
+    participants = {row["department_code"]: row for row in created.json()["participants"]}
+    assert participants["MPCB"]["officer_id"] == mpcb_officer_id
+    assert participants["DISH"]["officer_id"] == dish_officer_id
+    listed = client.get("/api/officer/inspections?inspection_type=JOINT", headers=officer_headers)
+    saved = next(item for item in listed.json()["items"] if item["id"] == joint_id)
+    assert set(saved["approval_ids"]) == set(payload["approval_ids"])
+    with SessionLocal() as db:
+        rows = db.scalars(select(InspectionParticipant).where(
+            InspectionParticipant.joint_inspection_id == joint_id
+        )).all()
+        assert len(rows) == 2
+        assert {row.officer_user_id for row in rows} == {mpcb_officer_id, dish_officer_id}
+
+
+def test_inspection_creation_requires_officer_and_valid_future_datetime(client) -> None:
+    _, approval_id, applicant_headers = _submitted_application(client, "inspection-permissions@example.com")
+    payload = {"inspection_type": "SINGLE", "scheduled_at": (datetime.now(UTC) + timedelta(days=2)).isoformat(),
+               "location": "Chakan MIDC, Pune"}
+    assert client.post(f"/api/officer/approvals/{approval_id}/inspections", json=payload).status_code == 401
+    assert client.post(f"/api/officer/approvals/{approval_id}/inspections", headers=applicant_headers, json=payload).status_code == 403
+    officer_headers = _login(client, "officer@example.com")
+    missing_application = client.post("/api/officer/joint-inspections", headers=officer_headers, json={
+        "application_id": 99999999, "approval_ids": [1, 2],
+        "scheduled_at": (datetime.now(UTC) + timedelta(days=2)).isoformat(), "site": "Test site",
+    })
+    assert missing_application.status_code == 404
+    past_payload = {**payload, "scheduled_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat()}
+    invalid = client.post(f"/api/officer/approvals/{approval_id}/inspections", headers=officer_headers, json=past_payload)
+    assert invalid.status_code == 422
+    assert "scheduled_at" in str(invalid.json()["detail"])
+    with SessionLocal() as db:
+        assert db.scalar(select(Inspection.id).where(Inspection.approval_id == approval_id)) is None
