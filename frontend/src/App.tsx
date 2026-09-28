@@ -20,6 +20,11 @@ type Role = 'APPLICANT' | 'OFFICER' | 'ADMIN'
 type User = { id: number; email: string; full_name: string; role: Role }
 type AuthResult = { access_token: string; user: User }
 
+const prototypeAccounts = {
+  OFFICER: { email: 'officer@mahaclear.com', password: 'demoofficer@123456789' },
+  ADMIN: { email: 'admin@mahaclear.com', password: 'demoadmin@123456789' },
+} as const
+
 const dashboardFor: Record<Role, string> = {
   APPLICANT: '/applicant',
   OFFICER: '/officer',
@@ -42,24 +47,31 @@ function LoginPage() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  async function loginWithCredentials(credentials: { email: string; password: string }, expectedRole?: Role) {
     setError('')
     setBusy(true)
     try {
       const response = await fetch(apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(credentials),
       })
       if (!response.ok) throw new Error(await readError(response))
       const result: AuthResult = await response.json()
+      if (expectedRole && result.user.role !== expectedRole) {
+        throw new Error(`The configured demo account does not have the ${expectedRole} role.`)
+      }
       localStorage.setItem('mahaclear_access_token', result.access_token)
       redirect(dashboardFor[result.user.role])
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to sign in.')
       setBusy(false)
     }
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    void loginWithCredentials({ email, password })
   }
 
   return (
@@ -71,6 +83,13 @@ function LoginPage() {
         {error && <p className="form-error" role="alert">{error}</p>}
         <button className="primary-button full-width" type="submit" disabled={busy}>{busy ? t('auth.signingIn') : t('auth.signIn')} <span aria-hidden="true">→</span></button>
       </form>
+      <section className="quick-login" aria-label="Quick Login — Prototype">
+        <div><strong>Quick Login — Prototype</strong><small>For prototype demonstration</small></div>
+        <div className="quick-login-actions">
+          <button className="secondary-button" type="button" disabled={busy} onClick={() => void loginWithCredentials(prototypeAccounts.OFFICER, 'OFFICER')}>{busy ? 'Signing in…' : 'Login as Officer'}</button>
+          <button className="secondary-button" type="button" disabled={busy} onClick={() => void loginWithCredentials(prototypeAccounts.ADMIN, 'ADMIN')}>{busy ? 'Signing in…' : 'Login as Admin'}</button>
+        </div>
+      </section>
       <p className="auth-switch">{t('auth.newHere')} <a href="/register">{t('auth.createAccount')}</a></p>
       {import.meta.env.DEV && <DemoCredentials />}
     </AuthFrame>
