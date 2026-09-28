@@ -886,3 +886,4 @@ button, a, input, select, textarea, summary { -webkit-tap-highlight-color: trans
 .admin-data-stamp, .admin-chart-panel header p, .admin-bar-row > span, .admin-bar-row b { font-size: 14px; }
 .admin-event-list strong, .admin-event-list p, .admin-event-list time, .admin-event-list small { font-size: 14px; }
 .admin-kpis strong { font-size: 26px; }
+.language-switcher{position:fixed;right:18px;bottom:18px;z-index:1000;display:flex;align-items:center;gap:8px;padding:7px 10px;background:#fff;border:1px solid #d9e1eb;border-radius:8px;box-shadow:0 4px 18px #172b4d1c;color:#40516a;font-size:13px}.language-switcher select{border:0;background:transparent;color:#1b2d47;font:inherit;cursor:pointer;outline-color:#315f9e}

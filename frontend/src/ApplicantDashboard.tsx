@@ -2,6 +2,7 @@ import { apiUrl } from './apiBase'
 import { useEffect, useState } from 'react'
 import type { ApplicationsResponse } from './applicationTypes'
 import { formatDate, statusLabel } from './applicationTypes'
+import { useTranslation } from 'react-i18next'
 
 type ApplicantUser = { role: string }
 type DashboardApplication = {
@@ -32,6 +33,7 @@ async function responseMessage(response: Response): Promise<string> {
 }
 
 export default function ApplicantDashboard() {
+  const { t } = useTranslation()
   const [data, setData] = useState<ApplicationsResponse | null>(null)
   const [dashboard, setDashboard] = useState<ApplicantDashboardData | null>(null)
   const [error, setError] = useState('')
@@ -109,22 +111,22 @@ export default function ApplicantDashboard() {
     <div className="applicant-shell">
       <header className="applicant-topbar">
         <a className="brand" href="/applicant"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a>
-        <nav className="applicant-top-nav" aria-label="Applicant navigation"><a className="active" href="/applicant">Dashboard</a><a href="#applications">Applications</a><a href="/applicant/fees">Fees</a><a href="/notifications">Notifications</a></nav>
-        <button className="applicant-signout" onClick={() => { localStorage.removeItem('mahaclear_access_token'); window.location.assign('/login') }}>Sign out <span>↗</span></button>
+        <nav className="applicant-top-nav" aria-label="Applicant navigation"><a className="active" href="/applicant">{t('nav.dashboard')}</a><a href="#applications">{t('nav.applications')}</a><a href="/applicant/fees">{t('nav.fees')}</a><a href="/notifications">{t('nav.notifications')}</a></nav>
+        <button className="applicant-signout" onClick={() => { localStorage.removeItem('mahaclear_access_token'); window.location.assign('/login') }}>{t('nav.signOut')} <span>↗</span></button>
       </header>
       <aside className="applicant-sidebar">
-        <div className="workspace-nav-label">APPLICANT WORKSPACE</div>
-        <a className="side-link selected" href="/applicant"><span>◫</span> Dashboard</a>
-        <a className="side-link" href="#applications"><span>▤</span> My applications</a>
-        <a className="side-link" href="/applicant/fees"><span>₹</span> Fee ledger</a>
-        <a className="side-link" href="/notifications"><span>◉</span> Notifications</a>
+        <div className="workspace-nav-label">{t('applicant.workspace')}</div>
+        <a className="side-link selected" href="/applicant"><span>◫</span> {t('nav.dashboard')}</a>
+        <a className="side-link" href="#applications"><span>▤</span> {t('nav.myApplications')}</a>
+        <a className="side-link" href="/applicant/fees"><span>₹</span> {t('nav.feeLedger')}</a>
+        <a className="side-link" href="/notifications"><span>◉</span> {t('nav.notifications')}</a>
         <div className="sidebar-note"><span className="sidebar-note-mark">✳</span><strong>One window.<br />Every approval.</strong><small>North-Star · SIH 2026</small></div>
         <div className="sidebar-bottom">MAHACLEAR-AI <span>·</span> APPLICANT</div>
       </aside>
       <main className="applicant-main">
         <div className="breadcrumb">APPLICANT WORKSPACE <span>/</span> DASHBOARD</div>
         <div className="applicant-heading">
-          <div><span className="eyebrow"><i /> YOUR APPROVAL WORKSPACE</span><h1>Applicant dashboard</h1><p>Track your applications and continue where you left off.</p></div>
+          <div><span className="eyebrow"><i /> {t('applicant.workspace')}</span><h1>{t('applicant.dashboardTitle')}</h1><p>{t('applicant.dashboardIntro')}</p></div>
           <button className="primary-button new-application-button" onClick={startApplication} disabled={creating}>{creating ? 'Preparing draft…' : 'New application'} <span>＋</span></button>
         </div>
         {error && <div className="applicant-error" role="alert">{error} <button onClick={() => window.location.reload()}>Retry</button></div>}
@@ -171,10 +173,10 @@ export default function ApplicantDashboard() {
             </div>
             <section className="applications-panel" id="applications">
               <div className="applications-panel-heading"><div><span className="card-kicker">YOUR APPLICATIONS</span><h2>Application register</h2></div><span className="application-count">{data?.applications.length ?? 0} RECORDS</span></div>
-              {(data?.applications.length ?? 0) === 0 ? <div className="empty-applications"><span className="empty-mark">＋</span><h3>Your application list is clear.</h3><p>Start an application to save a draft and track its progress here.</p><button className="primary-button" onClick={startApplication} disabled={creating}>Start an application <span>→</span></button></div> : (
+              {(data?.applications.length ?? 0) === 0 ? <div className="empty-applications"><span className="empty-mark">＋</span><h3>{t('applicant.emptyTitle')}</h3><p>{t('applicant.emptyDescription')}</p><button className="primary-button" onClick={startApplication} disabled={creating}>{t('applicant.start')} <span>→</span></button></div> : (
                 <div className="application-table-wrap">
                   <table className="application-table">
-                    <thead><tr><th>APPLICATION ID</th><th>COMPANY</th><th>INDUSTRY</th><th>RISK</th><th>OVERALL STATUS</th><th>PROGRESS</th><th>CURRENT DEPARTMENT</th><th>EXPECTED COMPLETION</th><th>ACTIONS</th></tr></thead>
+                    <thead><tr><th>{t('applicant.applicationId')}</th><th>{t('common.company')}</th><th>{t('applicant.industry')}</th><th>{t('common.risk')}</th><th>{t('applicant.overallStatus')}</th><th>{t('applicant.progress')}</th><th>{t('applicant.currentDepartment')}</th><th>{t('applicant.expectedCompletion')}</th><th>{t('applicant.actions')}</th></tr></thead>
                     <tbody>{data?.applications.map((application) => {
                       const isDraft = application.status === 'DRAFT'
                       const href = isDraft ? `/applicant/applications/${application.id}/edit` : `/applicant/applications/${application.id}/view`

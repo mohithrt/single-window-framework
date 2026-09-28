@@ -14,6 +14,7 @@ import AdminDashboardPage from './AdminDashboardPage'
 import MahaClearAssistantPage from './MahaClearAssistantPage'
 import { AdminApplicationPage, AdminAuditPage } from './AdminInspectionPages'
 import ApplicantFeesPage from './ApplicantFeesPage'
+import { useTranslation } from 'react-i18next'
 
 type Role = 'APPLICANT' | 'OFFICER' | 'ADMIN'
 type User = { id: number; email: string; full_name: string; role: Role }
@@ -35,6 +36,7 @@ async function readError(response: Response) {
 }
 
 function LoginPage() {
+  const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -61,21 +63,22 @@ function LoginPage() {
   }
 
   return (
-    <AuthFrame eyebrow="WELCOME BACK" title="Your next step starts here."
-      description="Sign in to your single-window approval workspace.">
+    <AuthFrame eyebrow={t('auth.welcome')} title={t('auth.title')}
+      description={t('auth.description')}>
       <form className="auth-form" onSubmit={submit}>
-        <label>Email address<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" /></label>
-        <label>Password<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" /></label>
+        <label>{t('auth.email')}<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" /></label>
+        <label>{t('auth.password')}<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t('auth.enterPassword')} /></label>
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="primary-button full-width" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'} <span aria-hidden="true">→</span></button>
+        <button className="primary-button full-width" type="submit" disabled={busy}>{busy ? t('auth.signingIn') : t('auth.signIn')} <span aria-hidden="true">→</span></button>
       </form>
-      <p className="auth-switch">New to MAHACLEAR-AI? <a href="/register">Create an account</a></p>
+      <p className="auth-switch">{t('auth.newHere')} <a href="/register">{t('auth.createAccount')}</a></p>
       {import.meta.env.DEV && <DemoCredentials />}
     </AuthFrame>
   )
 }
 
 function RegisterPage() {
+  const { t } = useTranslation()
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [companyName, setCompanyName] = useState('')
@@ -104,19 +107,19 @@ function RegisterPage() {
   }
 
   return (
-    <AuthFrame eyebrow="CREATE YOUR ACCOUNT" title={complete ? 'You’re ready to sign in.' : 'A clearer path begins with one account.'}
-      description={complete ? 'Your applicant account has been created.' : 'Start with one profile. Your account will have applicant access.'}>
-      {complete ? <div className="success-panel"><span className="success-mark">✓</span><p>Account created for <strong>{email}</strong>.</p><a className="primary-button full-width button-link" href="/login">Continue to sign in <span>→</span></a></div> : (
+    <AuthFrame eyebrow={t('auth.registerEyebrow')} title={complete ? 'You’re ready to sign in.' : 'A clearer path begins with one account.'}
+      description={complete ? t('auth.accountCreated') : 'Start with one profile. Your account will have applicant access.'}>
+      {complete ? <div className="success-panel"><span className="success-mark">✓</span><p>{t('auth.accountCreated')} <strong>{email}</strong>.</p><a className="primary-button full-width button-link" href="/login">{t('auth.continue')} <span>→</span></a></div> : (
         <form className="auth-form" onSubmit={submit}>
-          <label>Full name<input autoComplete="name" required minLength={2} maxLength={160} value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Your name" /></label>
-          <label>Email address<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" /></label>
-          <label>Company name <span className="optional-label">OPTIONAL</span><input autoComplete="organization" maxLength={200} value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Your organization" /></label>
-          <label>Password<input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 12 characters" /><small>Use at least 12 characters.</small></label>
+          <label>{t('auth.fullName')}<input autoComplete="name" required minLength={2} maxLength={160} value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder={t('auth.yourName')} /></label>
+          <label>{t('auth.email')}<input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@company.com" /></label>
+          <label>{t('auth.companyName')} <span className="optional-label">{t('auth.optional')}</span><input autoComplete="organization" maxLength={200} value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder={t('auth.yourOrganization')} /></label>
+          <label>{t('auth.password')}<input type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 12 characters" /><small>{t('auth.passwordLength')}</small></label>
           {error && <p className="form-error" role="alert">{error}</p>}
-          <button className="primary-button full-width" type="submit" disabled={busy}>{busy ? 'Creating account…' : 'Create applicant account'} <span aria-hidden="true">→</span></button>
+          <button className="primary-button full-width" type="submit" disabled={busy}>{busy ? 'Creating account…' : t('auth.createApplicant')} <span aria-hidden="true">→</span></button>
         </form>
       )}
-      <p className="auth-switch">Already registered? <a href="/login">Sign in</a></p>
+      <p className="auth-switch">{t('auth.alreadyRegistered')} <a href="/login">{t('auth.signIn')}</a></p>
     </AuthFrame>
   )
 }

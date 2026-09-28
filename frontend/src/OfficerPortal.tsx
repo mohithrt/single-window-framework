@@ -2,6 +2,7 @@ import { apiUrl } from './apiBase'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import AuthenticatedDownload from './AuthenticatedDownload'
+import { useTranslation } from 'react-i18next'
 
 type View = 'dashboard' | 'queue' | 'inspections' | 'joint-inspections' | 'documents' | 'escalations' | 'reports' | 'profile' | 'review'
 type Officer = { id: number; full_name: string; email: string; role: string }
@@ -61,6 +62,7 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export default function OfficerPortal({ view, approvalId }: { view: View; approvalId?: number }) {
+  const { t } = useTranslation()
   const [officer, setOfficer] = useState<Officer | null>(null)
   const [authError, setAuthError] = useState('')
   useEffect(() => {
@@ -70,13 +72,14 @@ export default function OfficerPortal({ view, approvalId }: { view: View; approv
     }).catch((error: unknown) => setAuthError(error instanceof Error ? error.message : 'Unable to verify officer access.'))
   }, [])
   function signOut() { localStorage.removeItem('mahaclear_access_token'); window.location.assign('/login') }
-  const titles: Record<View, string> = { dashboard: 'Officer dashboard', queue: view === 'escalations' ? 'Escalated applications' : 'Application queue', inspections: 'Inspections', 'joint-inspections': 'Joint inspections', documents: 'Documents', escalations: 'Escalations', reports: 'Reports', profile: 'Officer profile', review: 'Application review' }
+  const navLabels: Record<string, string> = { dashboard: 'nav.dashboard', queue: 'nav.queue', inspections: 'nav.inspections', 'joint-inspections': 'nav.jointInspections', documents: 'nav.documents', escalations: 'nav.escalations', reports: 'nav.reports', profile: 'nav.profile' }
+  const titles: Record<View, string> = { dashboard: t('officer.dashboard'), queue: view === 'escalations' ? t('officer.escalatedApplications') : t('officer.queue'), inspections: t('nav.inspections'), 'joint-inspections': t('nav.jointInspections'), documents: t('nav.documents'), escalations: t('nav.escalations'), reports: t('nav.reports'), profile: t('officer.profile'), review: t('officer.applicationReview') }
 
   return <div className="officer-shell">
-    <header className="officer-topbar"><a className="brand" href="/officer"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a><div className="officer-top-label">DEPARTMENT REVIEW PORTAL</div><a className="officer-notification-link" href="/notifications">Notifications</a><button className="signout-button" onClick={signOut}>Sign out <span>↗</span></button></header>
-    <aside className="officer-sidebar"><div className="workspace-nav-label">OFFICER WORKSPACE</div>{nav.map(([key, name, icon]) => <a key={key} className={`side-link ${view === key || (view === 'review' && key === 'queue') ? 'selected' : ''}`} href={`/officer${key === 'dashboard' ? '' : `/${key}`}`}><span>{icon}</span>{name}</a>)}<div className="officer-sidebar-bottom"><strong>{officer?.full_name ?? 'Officer'}</strong><small>{officer?.email ?? 'Verified staff account'}</small></div></aside>
+    <header className="officer-topbar"><a className="brand" href="/officer"><span className="brand-mark">M</span><span>MAHA<span className="brand-accent">CLEAR</span><span className="brand-ai">.AI</span></span></a><div className="officer-top-label">{t('officer.portal')}</div><a className="officer-notification-link" href="/notifications">{t('nav.notifications')}</a><button className="signout-button" onClick={signOut}>{t('nav.signOut')} <span>↗</span></button></header>
+    <aside className="officer-sidebar"><div className="workspace-nav-label">{t('officer.workspace')}</div>{nav.map(([key, , icon]) => <a key={key} className={`side-link ${view === key || (view === 'review' && key === 'queue') ? 'selected' : ''}`} href={`/officer${key === 'dashboard' ? '' : `/${key}`}`}><span>{icon}</span>{t(navLabels[key])}</a>)}<div className="officer-sidebar-bottom"><strong>{officer?.full_name ?? 'Officer'}</strong><small>{officer?.email ?? t('officer.verifiedAccount')}</small></div></aside>
     <main className="officer-main"><div className="breadcrumb">OFFICER WORKSPACE <span>/</span> {titles[view].toUpperCase()}</div>
-      {authError ? <div className="applicant-error" role="alert">{authError}</div> : !officer ? <div className="loading-panel">Verifying officer access…</div> : <>
+      {authError ? <div className="applicant-error" role="alert">{authError}</div> : !officer ? <div className="loading-panel">{t('officer.verify')}</div> : <>
         {view === 'dashboard' && <OfficerDashboard officer={officer} />}
         {view === 'queue' && <QueuePage />}
         {view === 'escalations' && <QueuePage escalations />}
